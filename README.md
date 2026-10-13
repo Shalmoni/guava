@@ -24,6 +24,8 @@ For a production build, run `npm run build` in `web/`. The output goes to `web/d
 - Explicit Quick Start or planned drive, GPS-based local recording while the browser stays active, map following, a basic instruction banner, navigation/game dock, Stop/Save/Discard, recap, profile, XP, distance, height, and locally explored roads
 - Territory visual preview of locally driven paths (not multiplayer ownership)
 - Road Pulse Mine preview in which repeated local drives darken a road; Everybody clearly says community data is not connected
+- Clickable XP/Distance/Height/Territory leaderboard categories and a separately labeled **Game Lab** with three simulated drivers, real road geometry near Harish, a 24-hour UTC settlement preview, and a territory map. Automated tests cover wins, ties, duplicate crossings, next-day transfers, and the settlement cutoff. The simulation is not live community data.
+- Profile insights, editable local display name, privacy explanation, local trip export, and Google sign-in wiring that activates only after a separate Guava Supabase project and OAuth provider are configured
 
 The web preview is **not a replacement for a safety-grade navigation app**. It has no live traffic, robust rerouting, background navigation, voice guidance, reliable map matching, or shared accounts. Mobile browsers can suspend location updates when locked or backgrounded. Do not rely on it as your only source of driving directions. The public Photon/OSRM services are intended for a small review group and may be throttled or unavailable. Production routing, search, and traffic require dedicated providers.
 

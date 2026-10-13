@@ -4,6 +4,8 @@ import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import type { DrivingRoute, DrivePoint, MapView, Point, RoadScope, Trip } from './model';
 import { ISRAEL_CENTER } from './model';
+import type { DriverId } from './game';
+import { DEMO_DRIVERS } from './game';
 
 type Props = {
   view: MapView;
@@ -18,6 +20,8 @@ type Props = {
   northUp: boolean;
   zoomCommand: number;
   centerCommand: number;
+  demoTerritory: Record<DriverId | 'contested', Point[][]> | null;
+  demoFocusCommand: number;
 };
 
 const BASE_STYLE = 'https://tiles.openfreemap.org/styles/positron';
@@ -80,6 +84,9 @@ function syncMap(map: maplibregl.Map, props: Props) {
   const saved = props.trips.map(trip => trip.points.map(point => point.position));
   const live = props.livePoints.map(point => point.position);
   ensureLine(map, 'guava-territory', props.view === 'Territory' ? saved : [], '#f18ca0', 9, 0.72);
+  for (const id of ['you', 'maya', 'noam', 'contested'] as const) {
+    ensureLine(map, `guava-demo-${id}`, props.view === 'Territory' ? props.demoTerritory?.[id] || [] : [], id === 'contested' ? '#9ca7a9' : DEMO_DRIVERS[id].color, 10, .9);
+  }
   ensureLine(map, 'guava-live', props.view === 'Territory' ? [live] : [], '#e85d82', 10, 0.94);
   ensureLine(map, 'guava-road-pulse', props.view === 'Road Pulse' && props.roadScope === 'Mine' ? saved : [], '#d35377', 9, 0.22);
   ensureLine(map, 'guava-alternatives', props.routes.filter((_, index) => index !== props.selectedRoute).map(route => route.coordinates), '#919aa5', 5, 0.75);
@@ -161,6 +168,15 @@ export default function GuavaMap(props: Props) {
     if (!map || props.centerCommand === 0 || !props.position) return;
     map.easeTo({ center: props.position, zoom: props.isDriving ? 16 : 14.5, bearing: props.northUp ? 0 : (props.heading ?? 0), pitch: 0, duration: 500 });
   }, [props.centerCommand]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !props.demoTerritory || props.demoFocusCommand === 0) return;
+    const points = Object.values(props.demoTerritory).flat(2);
+    if (!points.length) return;
+    const bounds = points.reduce((box, point) => box.extend(point), new maplibregl.LngLatBounds(points[0], points[0]));
+    map.fitBounds(bounds, { padding: 55, duration: 600, maxZoom: 14 });
+  }, [props.demoFocusCommand, props.demoTerritory]);
 
   return <div ref={nodeRef} className="map-canvas" aria-label="Interactive map" />;
 }
