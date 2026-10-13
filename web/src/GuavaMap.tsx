@@ -131,6 +131,8 @@ export default function GuavaMap(props: Props) {
       marker.className = 'position-arrow';
       marker.innerHTML = '<span></span>';
       markerRef.current = new maplibregl.Marker({ element: marker, rotationAlignment: 'map' }).setLngLat(props.position).addTo(map);
+      // A browser fix can arrive after the map first renders; follow it once.
+      map.easeTo({ center: props.position, zoom: 14.5, duration: 650 });
     }
     markerRef.current.setLngLat(props.position);
     markerRef.current.setRotation(props.heading ?? 0);
