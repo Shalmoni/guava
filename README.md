@@ -2,6 +2,8 @@
 
 Guava is a mobile-first map-game and navigation experiment. **The shareable version is now the web app in `web/`**, deployed through GitHub Pages like Wird. The older native iOS prototype remains in `Mappy/` and `Mappy.xcodeproj` as a design/behavior reference; it is not what the public link runs.
 
+**Try the web preview:** [shalmoni.github.io/guava](https://shalmoni.github.io/guava/). Open it on a phone browser and allow location for the driving preview.
+
 ## Run the web app
 
 Requires Node.js 22 or newer.

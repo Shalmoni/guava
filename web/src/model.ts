@@ -36,7 +36,7 @@ export interface DrivingRoute {
   steps: RouteStep[];
 }
 
-export const ISRAEL_CENTER: Point = [35.174, 32.461];
+export const ISRAEL_CENTER: Point = [35.043, 32.461]; // Harish until browser location is available
 export const STORAGE_KEY = 'guava.web.trips.v1';
 
 export function loadTrips(): Trip[] {
