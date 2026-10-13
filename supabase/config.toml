@@ -1,0 +1,10 @@
+project_id = "guava"
+
+[db.migrations]
+enabled = true
+
+[auth]
+site_url = "http://127.0.0.1:3000"
+
+# Production Google OAuth is configured only in the separate Guava dashboard.
+# Never commit provider secrets here.

@@ -1,0 +1,13 @@
+.DS_Store
+.derived/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+# Local screenshots and unapproved logo drafts at the repository root.
+/*.png
+web/node_modules/
+web/dist/
+web/.env*
+!web/.env.example
+# Private product working plan stays in this workspace, not the public code repository.
+full plan.md
