@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Guava alpha privacy notice</title>
+  <style>
+    body { margin: 0; padding: 32px 20px 80px; background: #fff; color: #252327; font: 16px/1.55 system-ui, sans-serif; }
+    main { max-width: 680px; margin: auto; }
+    h1, h2 { line-height: 1.2; }
+    a { color: #b43e38; }
+    .note { background: #fff0ed; border-radius: 14px; padding: 16px; }
+  </style>
+</head>
+<body><main>
+  <p><a href="./">← Back to Guava</a></p>
+  <h1>Guava alpha privacy notice</h1>
+  <p>Updated October 16, 2026. Guava is an experimental driving map and road game for a small group of testers. Do not rely on it as your only navigation or traffic source.</p>
+
+  <h2>Your account</h2>
+  <p>Google sign-in provides Guava with a basic account identifier, email address, and name. Supabase stores your Guava account and display name. Other players do not see your email address. Your community profile is off by default.</p>
+
+  <h2>Location and drives</h2>
+  <p>The app requests location while the web page is open. It records a drive only after you tap Start and choose Finish &amp; Save. Full GPS samples for saved drives are stored in this browser. They may be lost if you clear browser storage or switch devices. You can export them in Settings.</p>
+  <p>If you turn on community play, newly finished drives are sent over HTTPS to Guava’s Supabase function. The function sends sampled coordinates to the public OSRM road-matching service. Guava stores a drive summary, score, and short matched road sections in Supabase; it does not store the full GPS trace there. This alpha uses those road sections to calculate shared road-use and daily territory. Captured roads and your display name can reveal places you visit, including near home or work. Only sign in and enable community play if you are comfortable with that.</p>
+  <p>Turning community play off removes your shared drives, scores, and claims from Guava’s database. Your browser’s saved drives remain until you clear site data. Previously viewed or copied information cannot be recalled from other people.</p>
+
+  <h2>Other services</h2>
+  <p>Google handles sign-in; Supabase hosts account and game data. The map and route experience also requests data from OpenFreeMap/OpenStreetMap, Photon search, OSRM routing and matching, elevation tiles, and Open-Meteo elevation. These services may receive network information and the coordinates needed for the feature you use. Guava does not sell your data.</p>
+
+  <h2>Alpha limitations and contact</h2>
+  <p>Browser location may stop when the screen locks or the tab is in the background. Road matching, traffic, scores and navigation can be incomplete or wrong. This notice may change as the alpha evolves. For privacy questions, use the support contact shown on Guava’s Google sign-in screen.</p>
+  <p class="note">Drive safely. Never interact with Guava’s game controls while moving. Follow road signs and use a trusted navigation app for critical directions.</p>
+</main></body></html>

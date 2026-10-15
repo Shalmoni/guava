@@ -11,3 +11,4 @@ web/.env*
 !web/.env.example
 # Private product working plan stays in this workspace, not the public code repository.
 full plan.md
+supabase/.temp/

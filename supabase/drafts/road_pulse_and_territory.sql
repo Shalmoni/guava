@@ -1,12 +1,8 @@
+-- DRAFT ONLY: Do not apply until road-graph, anti-cheat, privacy, and scoring
+-- designs are reviewed. Kept outside migrations to prevent accidental deploy.
 -- Guava's community scoring foundation. No raw GPS points are stored here.
 -- A trusted ingestion service must map-match and verify each drive before it calls
 -- ingest_verified_drive; this function is deliberately unavailable to app clients.
-
-create table public.guava_profiles (
-  user_id uuid primary key references auth.users(id) on delete cascade,
-  display_name text not null check (char_length(display_name) between 1 and 32),
-  created_at timestamptz not null default now()
-);
 
 create table public.road_units (
   id uuid primary key default gen_random_uuid(),
@@ -64,7 +60,6 @@ create table public.territory_owners (
 );
 create index territory_owners_owner_idx on public.territory_owners (owner_id);
 
-alter table public.guava_profiles enable row level security;
 alter table public.road_units enable row level security;
 alter table public.verified_drives enable row level security;
 alter table public.road_crossings enable row level security;
@@ -73,7 +68,6 @@ alter table public.road_use_drivers enable row level security;
 alter table public.territory_rounds enable row level security;
 alter table public.territory_owners enable row level security;
 
-create policy "Public profile names" on public.guava_profiles for select to authenticated using (true);
 create policy "Public road units" on public.road_units for select to authenticated using (true);
 create policy "Own verified drives" on public.verified_drives for select to authenticated using (user_id = (select auth.uid()));
 create policy "Own crossings" on public.road_crossings for select to authenticated using (user_id = (select auth.uid()));
@@ -83,10 +77,10 @@ create policy "Shared round clock" on public.territory_rounds for select to auth
 create policy "Shared territory" on public.territory_owners for select to authenticated using (true);
 
 -- App users can read only the intended public aggregates and their own records.
-revoke all on public.guava_profiles, public.road_units, public.verified_drives,
+revoke all on public.road_units, public.verified_drives,
   public.road_crossings, public.road_use_totals, public.road_use_drivers, public.territory_rounds,
   public.territory_owners from anon, authenticated;
-grant select on public.guava_profiles, public.road_units, public.road_use_totals,
+grant select on public.road_units, public.road_use_totals,
   public.territory_rounds, public.territory_owners to authenticated;
 grant select on public.verified_drives, public.road_crossings to authenticated;
 

@@ -1,38 +1,35 @@
-# Guava
+# Guava friend alpha
 
-Guava is a mobile-first map-game and navigation experiment. **The shareable version is now the web app in `web/`**, deployed through GitHub Pages like Wird. The older native iOS prototype remains in `Mappy/` and `Mappy.xcodeproj` as a design/behavior reference; it is not what the public link runs.
+Guava is a mobile-first driving map and road-territory game. The shareable app is the web build in `web/`, deployed through GitHub Pages at [shalmoni.github.io/guava](https://shalmoni.github.io/guava/). The older iOS prototype in `Mappy/` is a design reference, not the app that link opens.
 
-**Try the web preview:** [shalmoni.github.io/guava](https://shalmoni.github.io/guava/). Open it on a phone browser and allow location for the driving preview.
+The alpha requires Google sign-in. Community play is opt-in and off by default. A player can explore the map and save private drives without joining the shared game. After opting in, **newly finished** drives can add shared XP, distance, height traveled, road use and daily territory. Older private drives are not silently uploaded.
 
-## Run the web app
+## Rules
+
+- Drives shorter than 50 m do not score. Guava records only after Start and saves only after Finish & Save.
+- The authenticated `submit-drive` Supabase function validates GPS timing and movement, map-matches sampled coordinates against OSRM, then writes a summary and short road-cell geometry. Full GPS samples remain in the browser, not the hosted database.
+- Each separate verified drive contributes one vote per road cell, regardless of loops or travel direction. A daily UTC round settles at 00:05 the following day. The unique top driver wins; ties clear ownership; untouched cells keep their owner.
+- Territory paints only captured road sections. A tap identifies the owner and approximate section length. Road Pulse shows community roads only after three distinct opted-in drivers have used them. Names are displayed only for participants.
+- The live leaderboard uses hosted scores. The clearly labeled Game Lab remains a separate ten-player simulation for reviewing how a populated map might look.
+- Turning community play off deletes that player's shared drive summaries, scores and ownership; local browser drives remain.
+
+## Limits — important for testers
+
+This is **not safety-grade navigation** and does not have live traffic, dependable closures, speed limits, background GPS, voice instructions, or robust rerouting. Phone browsers can pause location updates when locked or backgrounded. Public Photon and OSRM services can be unavailable or throttled. Use a trusted navigation app for important directions and never operate game controls while driving.
+
+Regular and Altitude views work. Satellite remains disabled until an imagery provider is configured. The friend alpha is Israel-only. Territory cells are approximately 25 m hexes on map-matched roads; nearby parallel roads can still collide in one cell. Scores and matching are experimental, not fraud-proof. See the [alpha privacy notice](https://shalmoni.github.io/guava/privacy.html).
+
+## Local development
 
 Requires Node.js 22 or newer.
 
 ```bash
 cd web
 npm ci
+npm test
 npm run dev
 ```
 
-For a production build, run `npm run build` in `web/`. The output goes to `web/dist/`. Pushes to `main` deploy that output through `.github/workflows/deploy-pages.yml`.
+`npm run build` creates `web/dist`. Pushes to `main` deploy through `.github/workflows/deploy-pages.yml`. The workflow reads the public `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` GitHub variables and sets `VITE_REQUIRE_AUTH=true`. Never put a Supabase service-role key or Google OAuth client secret into `VITE_*` variables or the repository.
 
-## What works in the web preview
-
-- Mobile and landscape map layout, responsive controls, and Avenir Next/Guava-pink visual style
-- Regular road map from OpenFreeMap and real 2D Altitude color relief from elevation tiles
-- Destination search through Photon and road routes/alternatives through OSRM's public demo
-- Explicit Quick Start or planned drive, GPS-based local recording while the browser stays active, map following, a basic instruction banner, navigation/game dock, Stop/Save/Discard, recap, profile, XP, distance, height, and locally explored roads
-- Territory visual preview of locally driven paths (not multiplayer ownership)
-- Road Pulse Mine preview in which repeated local drives darken a road; Everybody clearly says community data is not connected
-- Clickable XP/Distance/Height/Territory leaderboard categories and a separately labeled **Game Lab** with three simulated drivers, real road geometry near Harish, a 24-hour UTC settlement preview, and a territory map. Automated tests cover wins, ties, duplicate crossings, next-day transfers, and the settlement cutoff. The simulation is not live community data.
-- Profile insights, editable local display name, privacy explanation, local trip export, and Google sign-in wiring that activates only after a separate Guava Supabase project and OAuth provider are configured
-
-The web preview is **not a replacement for a safety-grade navigation app**. It has no live traffic, robust rerouting, background navigation, voice guidance, reliable map matching, or shared accounts. Mobile browsers can suspend location updates when locked or backgrounded. Do not rely on it as your only source of driving directions. The public Photon/OSRM services are intended for a small review group and may be throttled or unavailable. Production routing, search, and traffic require dedicated providers.
-
-Satellite is in the map picker but disabled until an imagery provider is configured. An optional MapTiler browser key can be supplied through `web/.env.local` as `VITE_MAPTILER_KEY`; restrict that public key to the deployment domain. No key or secret is committed.
-
-## Community backend
-
-`supabase/migrations/` holds an **undeployed** first schema for aggregate road frequency and fixed daily road-territory rounds. It is not connected to the web preview. A separate Guava Supabase project, Google sign-in, server-verified/map-matched drive ingestion, scheduled settlement, privacy controls, and real multi-user tests are required before Everybody Road Pulse, public leaderboards, or competitive Territory can go live. Do not reuse Wird's backend or credentials.
-
-The web app currently stores drives only in this browser's `localStorage`; clearing site data removes them. Browser-to-server sync and an export/deletion flow are future work.
+The hosted Guava Supabase project is separate from other products. `supabase/migrations/` records the profile and game schema, `supabase/functions/submit-drive/` contains the authenticated ingestion function, and a `pg_cron` job settles territory daily. `supabase/drafts/` is not deployed. Browser drives are stored in `localStorage` and can be exported in Settings.

@@ -1,0 +1,48 @@
+.week-legend {
+  flex-wrap: wrap;
+  gap: 5px 8px;
+  overflow: visible;
+  white-space: normal;
+}
+
+.week-legend .legend-hint {
+  color: #697579;
+  font-weight: 600;
+}
+
+.territory-inspector {
+  position: absolute;
+  z-index: 7;
+  top: calc(env(safe-area-inset-top) + 76px);
+  right: 16px;
+  width: min(290px, calc(100vw - 32px));
+  display: grid;
+  gap: 7px;
+  padding: 12px 14px;
+  border: 1px solid #e6dadd;
+  border-radius: 17px;
+  background: rgba(255, 255, 255, .98);
+  box-shadow: 0 5px 19px #17202628;
+  color: #172026;
+}
+
+.territory-inspector-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.territory-inspector-head strong { flex: 1; }
+.territory-inspector-head button { border: 0; background: transparent; display: grid; place-items: center; }
+.territory-inspector small { color: #647276; line-height: 1.35; }
+.territory-inspector b { font-size: 13px; }
+
+.ranking-list .rank-map-button {
+  border: 0;
+  border-radius: 9px;
+  padding: 6px 8px;
+  background: #f18ca0;
+  color: #172026;
+  font-size: 11px;
+  font-weight: 800;
+}

@@ -1,0 +1,16 @@
+.signin-screen {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: calc(24px + env(safe-area-inset-top)) 20px calc(24px + env(safe-area-inset-bottom));
+  background: radial-gradient(circle at 15% 10%, #fce5e9, transparent 42%), #fff;
+}
+.signin-card { width: min(100%, 430px); padding: 32px 27px; border: 1px solid #f0e5e7; border-radius: 28px; background: #fff; box-shadow: 0 18px 50px #17202614; }
+.signin-brand { display: flex; align-items: center; gap: 12px; font-size: 27px; font-weight: 800; letter-spacing: -.06em; }
+.signin-card h1 { margin: 34px 0 12px; font-size: clamp(32px, 9vw, 44px); line-height: 1.08; letter-spacing: -.055em; }
+.signin-card p { color: #58666b; line-height: 1.5; }
+.signin-card .pink-button { margin-top: 16px; width: 100%; min-height: 54px; font-size: 16px; }
+.signin-wait { margin-top: 22px; font-weight: 700; }
+.signin-error { margin-top: 14px; color: #a22b47 !important; font-weight: 700; }
+.signin-privacy { margin: 18px 0 0; text-align: center; font-size: 13px; }
+.signin-privacy a { color: #9a3c3d; }

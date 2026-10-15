@@ -18,6 +18,7 @@ export interface Trip {
   newRoadUnits: number;
   xp: number;
   destination?: string;
+  communityStatus?: 'pending' | 'uploaded';
 }
 
 export interface RouteStep {
