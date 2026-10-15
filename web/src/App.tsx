@@ -658,6 +658,6 @@ export default function App() {
     </div></div>}
 
     {error && <div className="error-toast" role="alert"><span>{error}</span><button onClick={() => setError('')}><X size={16} /></button></div>}
-    {locationError && !position && !demoMode && <div className="location-note"><Compass size={17} /> {locationError}</div>}
+    {locationError && !position && !demoMode && panel === 'none' && <div className="location-note"><Compass size={17} /> {locationError}</div>}
   </div>;
 }
