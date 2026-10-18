@@ -92,13 +92,14 @@ export function finishTrip(
   height: number,
   older: Trip[],
   destination?: string,
+  driveId?: string,
 ): Trip | null {
   if (distance < 50 || points.length < 2) return null;
   const previous = new Set(older.flatMap(trip => [...tripUnits(trip.points)]));
   const units = tripUnits(points);
   const newRoadUnits = [...units].filter(unit => !previous.has(unit)).length;
   return {
-    id: crypto.randomUUID(), startedAt, endedAt: Date.now(), points,
+    id: driveId || crypto.randomUUID(), startedAt, endedAt: Date.now(), points,
     distanceMeters: distance, heightMeters: height, newRoadUnits,
     xp: 10 + Math.floor(distance / 1000 * 8) + Math.floor(height / 20) + newRoadUnits * 2,
     destination,

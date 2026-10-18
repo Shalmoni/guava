@@ -21,6 +21,12 @@ test('a qualifying drive earns the declared local XP formula', () => {
   assert.equal(repeat?.newRoadUnits, 0);
 });
 
+test('the finished drive keeps its live territory session ID', () => {
+  const id = '11111111-1111-4111-8111-111111111111';
+  const trip = finishTrip(samples, 1_000, 1_500, 40, [], undefined, id);
+  assert.equal(trip?.id, id);
+});
+
 test('route parser rejects missing routes instead of showing a fake line', () => {
   assert.throws(() => routeFromOSRM({ code: 'NoRoute', routes: [] }), /No driving route/);
 });

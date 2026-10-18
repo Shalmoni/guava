@@ -3,6 +3,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.117.3';
 type Point = [number, number];
 type Fix = { position: Point; altitude: number | null; timestamp: number };
 type Unit = { id: string; line: Point[]; length_m: number };
+type TimedUnit = Unit & { observed_at: string };
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -11,6 +12,23 @@ const cors = {
   'Content-Type': 'application/json',
 };
 const reply = (status: number, data: unknown) => new Response(JSON.stringify(data), { status, headers: cors });
+const localDay = (timestamp: number) => new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'Asia/Jerusalem', year: 'numeric', month: '2-digit', day: '2-digit',
+}).format(timestamp);
+
+function daySections(points: Fix[]): Fix[][] {
+  const sections: Fix[][] = [];
+  let section: Fix[] = [points[0]];
+  for (let index = 1; index < points.length; index++) {
+    const previous = points[index - 1], current = points[index];
+    if (localDay(previous.timestamp) !== localDay(current.timestamp)) {
+      if (section.length >= 2) sections.push(section);
+      section = [previous, current];
+    } else section.push(current);
+  }
+  if (section.length >= 2) sections.push(section);
+  return sections;
+}
 
 function metres(a: Point, b: Point): number {
   const lat = (a[1] + b[1]) / 2 * Math.PI / 180;
@@ -115,33 +133,42 @@ Deno.serve(async (request: Request) => {
 
   // Public OSRM is suitable for a small friend alpha, not production traffic
   // or a reliable always-on map-matching contract. Never send user identifiers.
-  const stride = Math.max(1, Math.ceil(points.length / 40));
-  const sampled = points.filter((_, index) => index % stride === 0 || index === points.length - 1);
-  const batches: Fix[][] = [];
-  for (let index = 0; index < sampled.length - 1; index += 9) batches.push(sampled.slice(index, index + 10));
   const matched: Array<{ distance: number; geometry: { coordinates: Point[] } }> = [];
+  const timedUnits = new Map<string, TimedUnit>();
   try {
-    for (const batch of batches) {
-      const coordinates = batch.map(fix => `${fix.position[0].toFixed(6)},${fix.position[1].toFixed(6)}`).join(';');
-      const endpoint = `https://router.project-osrm.org/match/v1/driving/${coordinates}?geometries=geojson&overview=full&tidy=true&gaps=ignore`;
-      const response = await fetch(endpoint, { signal: AbortSignal.timeout(12000) });
-      if (!response.ok) throw new Error('Road matching unavailable');
-      const match = await response.json() as {
-        code?: string; tracepoints?: Array<unknown | null>;
-        matchings?: Array<{ distance: number; geometry: { coordinates: Point[] } }>;
-      };
-      if (match.code !== 'Ok' || !match.matchings?.length
-          || (match.tracepoints?.filter(point => point === null).length || 0) > batch.length / 3) {
-        return reply(422, { error: 'Could not verify that this drive followed roads' });
+    for (const section of daySections(points)) {
+      const stride = Math.max(1, Math.ceil(section.length / 40));
+      const sampled = section.filter((_, index) => index % stride === 0 || index === section.length - 1);
+      const sectionMatched: typeof matched = [];
+      for (let index = 0; index < sampled.length - 1; index += 9) {
+        const batch = sampled.slice(index, index + 10);
+        const coordinates = batch.map(fix => `${fix.position[0].toFixed(6)},${fix.position[1].toFixed(6)}`).join(';');
+        const endpoint = `https://router.project-osrm.org/match/v1/driving/${coordinates}?geometries=geojson&overview=full&tidy=true&gaps=ignore`;
+        const response = await fetch(endpoint, { signal: AbortSignal.timeout(12000) });
+        if (!response.ok) throw new Error('Road matching unavailable');
+        const match = await response.json() as {
+          code?: string; tracepoints?: Array<unknown | null>;
+          matchings?: Array<{ distance: number; geometry: { coordinates: Point[] } }>;
+        };
+        if (match.code !== 'Ok' || !match.matchings?.length
+            || (match.tracepoints?.filter(point => point === null).length || 0) > batch.length / 3) {
+          return reply(422, { error: 'Could not verify that this drive followed roads' });
+        }
+        sectionMatched.push(...match.matchings.filter(item => item.geometry?.coordinates?.length > 1));
       }
-      matched.push(...match.matchings.filter(item => item.geometry?.coordinates?.length > 1));
+      matched.push(...sectionMatched);
+      const observed_at = new Date(section.at(-1)!.timestamp).toISOString();
+      const day = localDay(section.at(-1)!.timestamp);
+      for (const unit of roadUnits(sectionMatched.map(item => item.geometry.coordinates))) {
+        timedUnits.set(`${day}:${unit.id}`, { ...unit, observed_at });
+      }
     }
   } catch { return reply(503, { error: 'Road matching is temporarily unavailable. Your drive is still saved on this device; retry later.' }); }
   const distance = matched.reduce((sum, item) => sum + item.distance, 0);
   if (!matched.length || distance < 50 || distance > 200000
       || distance > rawDistance * 1.75 || distance < rawDistance * 0.5
       || distance / duration > 58) return reply(422, { error: 'Could not verify that this drive followed roads' });
-  const units = roadUnits(matched.map(item => item.geometry.coordinates));
+  const units = [...timedUnits.values()];
   if (units.length < 1 || units.length > 1500) return reply(422, { error: 'Could not divide this drive into road units' });
   const { data, error } = await admin.rpc('guava_ingest_matched_drive', {
     p_id: body.id, p_user_id: identity.user.id,

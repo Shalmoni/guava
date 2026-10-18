@@ -14,12 +14,12 @@ import { capturedStretches, DEMO_DRIVERS, WEEK_DRIVER_IDS, demoRound, sortedDemo
 import { loadDemoRoads, loadWeekRoads } from './demo';
 import { simulateWeek, weekLeaderboard, weekMapLayers, type WeekScene } from './week';
 import { isSupabaseConfigured, signInWithGoogle, supabase } from './supabase';
-import { cloudPulseLayers, cloudRankings, cloudTerritoryLayers, loadCloudGame, uploadCommunityDrive, type CloudGame, type CloudProfile } from './cloud';
+import { bankTerritorySegment, cloudPulseLayers, cloudRankings, cloudTerritoryLayers, loadCloudGame, uploadCommunityDrive, type CloudGame, type CloudProfile } from './cloud';
 import type { User } from '@supabase/supabase-js';
 
 type Panel = 'none' | 'drive' | 'tools' | 'maps' | 'search' | 'profile' | 'settings' | 'leaderboard' | 'recap';
 type Place = { name: string; detail: string; position: Point };
-type LiveDrive = { startedAt: number; points: DrivePoint[]; distance: number; height: number; altitudeAnchor: number | null; share: boolean };
+type LiveDrive = { id: string; startedAt: number; points: DrivePoint[]; distance: number; height: number; altitudeAnchor: number | null; share: boolean };
 const mapViews: MapView[] = ['Regular', 'Satellite', 'Territory', 'Road Pulse', 'Altitude'];
 const hasSatellite = Boolean(import.meta.env.VITE_MAPTILER_KEY);
 const requiresAccount = import.meta.env.VITE_REQUIRE_AUTH === 'true';
@@ -73,10 +73,12 @@ export default function App() {
   const [cloudProfile, setCloudProfile] = useState<CloudProfile | null>(null);
   const [cloudGame, setCloudGame] = useState<CloudGame | null>(null);
   const [cloudError, setCloudError] = useState('');
+  const [territorySyncError, setTerritorySyncError] = useState('');
   const [connectionResult, setConnectionResult] = useState('');
   const [communityOptIn, setCommunityOptIn] = useState(false);
   const [profileBusy, setProfileBusy] = useState(false);
   const [showWelcome, setShowWelcome] = useState(false);
+  const [dismissedLiveConsent, setDismissedLiveConsent] = useState(false);
   const [leaderboardMetric, setLeaderboardMetric] = useState<'XP' | 'Distance' | 'Height' | 'Territory'>('XP');
   const [demoRoads, setDemoRoads] = useState<RoadPiece[][] | null>(null);
   const [weekScene, setWeekScene] = useState<WeekScene | null>(null);
@@ -93,6 +95,7 @@ export default function App() {
   const stepRef = useRef(0);
   const lastPositionRef = useRef<Point | null>(null);
   const uploadingRef = useRef(new Set<string>());
+  const territoryCheckpointRef = useRef({ sessionId: '', nextIndex: 0, busy: false });
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
@@ -128,7 +131,7 @@ export default function App() {
         return;
       }
       const { data, error: readError } = await client.from('guava_profiles')
-        .select('user_id,display_name,community_opt_in').eq('user_id', userId).single();
+        .select('user_id,display_name,community_opt_in,live_territory_consent_at').eq('user_id', userId).single();
       if (!alive) return;
       if (readError) { setError(`Could not load your profile: ${readError.message}`); return; }
       const profile = data as CloudProfile;
@@ -181,6 +184,26 @@ export default function App() {
       }).finally(() => uploadingRef.current.delete(trip.id));
     }
   }, [authUser?.id, cloudProfile?.community_opt_in, trips]);
+
+  useEffect(() => {
+    if (!driving || !live?.share || !authUser || !cloudProfile?.community_opt_in || !cloudProfile.live_territory_consent_at) return;
+    const timer = window.setInterval(() => {
+      const current = driveRef.current;
+      const checkpoint = territoryCheckpointRef.current;
+      if (!current?.share || current.distance < 50 || checkpoint.busy || current.id !== checkpoint.sessionId) return;
+      const end = Math.min(current.points.length, checkpoint.nextIndex + 40);
+      const segment = current.points.slice(checkpoint.nextIndex, end);
+      const segmentDistance = segment.reduce((sum, fix, index) =>
+        index ? sum + distanceMeters(segment[index - 1].position, fix.position) : sum, 0);
+      if (segment.length < 2 || segmentDistance < 10) return;
+      checkpoint.busy = true;
+      void bankTerritorySegment(current.id, current.startedAt, segment)
+        .then(() => { checkpoint.nextIndex = end - 1; setTerritorySyncError(''); })
+        .catch(cause => setTerritorySyncError(cause instanceof Error ? cause.message : 'Territory is waiting to sync.'))
+        .finally(() => { checkpoint.busy = false; });
+    }, 15000);
+    return () => window.clearInterval(timer);
+  }, [driving, live?.id, live?.share, authUser?.id, cloudProfile?.community_opt_in, cloudProfile?.live_territory_consent_at]);
 
   useEffect(() => {
     if (authUser && cloudProfile && !cloudProfile.community_opt_in) setShowWelcome(localStorage.getItem(`guava.welcome.${authUser.id}`) !== 'done');
@@ -292,12 +315,15 @@ export default function App() {
     if (!position) { setError('Allow location to start a drive.'); return; }
     setDemoMode(false);
     const start: LiveDrive = {
+      id: crypto.randomUUID(),
       startedAt: Date.now(),
       points: [{ position, altitude: gpsAltitudeAvailable ? altitude : null, timestamp: Date.now() }],
       distance: 0, height: 0, altitudeAnchor: gpsAltitudeAvailable ? altitude : null,
-      share: Boolean(authUser && cloudProfile?.community_opt_in),
+      share: Boolean(authUser && cloudProfile?.community_opt_in && cloudProfile.live_territory_consent_at),
     };
     driveRef.current = start;
+    territoryCheckpointRef.current = { sessionId: start.id, nextIndex: 0, busy: false };
+    setTerritorySyncError('');
     setLive(start);
     setDriving(true);
     setDriveMode(routeOptions.length ? 'Navigation' : 'Game');
@@ -313,7 +339,7 @@ export default function App() {
     setLive(null);
     setPanel('none');
     if (save && current) {
-      const trip = finishTrip(current.points, current.startedAt, current.distance, current.height, trips, destination?.name);
+      const trip = finishTrip(current.points, current.startedAt, current.distance, current.height, trips, destination?.name, current.id);
       if (trip) {
         if (current.share && cloudProfile?.community_opt_in) trip.communityStatus = 'pending';
         const updated = [trip, ...trips].slice(0, 100);
@@ -457,8 +483,9 @@ export default function App() {
     if (cloudProfile.community_opt_in && !nextOptIn && !window.confirm('Leave community play? This removes your shared scores, drives and captured roads. Drives saved in this browser remain here.')) return false;
     setProfileBusy(true);
     const { data, error: profileError } = await supabase.from('guava_profiles')
-      .update({ display_name: name, community_opt_in: nextOptIn })
-      .eq('user_id', authUser.id).select('user_id,display_name,community_opt_in').single();
+      .update({ display_name: name, community_opt_in: nextOptIn,
+        live_territory_consent_at: nextOptIn ? cloudProfile.live_territory_consent_at || new Date().toISOString() : null })
+      .eq('user_id', authUser.id).select('user_id,display_name,community_opt_in,live_territory_consent_at').single();
     setProfileBusy(false);
     if (profileError) { setError(`Could not save your profile: ${profileError.message}`); return false; }
     setCloudProfile(data as CloudProfile);
@@ -604,15 +631,24 @@ export default function App() {
         {selected && <button className="dock-mode" onClick={() => setDriveMode(value => value === 'Navigation' ? 'Game' : 'Navigation')}>{driveMode === 'Navigation' ? 'Show progress' : 'Show route'} <ChevronDown size={16} /></button>}
         <button className="dock-map" onClick={() => setPanel('maps')}><Layers3 size={17} /> Map</button>
       </div>
+      {territorySyncError && live?.share && <small className="territory-sync-warning">Territory is waiting to sync. Guava will retry while this page is open.</small>}
     </div>}
 
     {showWelcome && authUser && cloudProfile && !driving && <div className="sheet-backdrop welcome-backdrop"><section className="bottom-sheet welcome-sheet" aria-label="Welcome to Guava">
       <div className="sheet-header"><h2>Welcome to Guava</h2><button onClick={finishWelcome} aria-label="Not now"><X size={22} /></button></div>
       <p>Drive with the map and explore roads. After this screen, your browser will ask for location so Guava can show where you are and record drives on this device.</p>
-      <div className="welcome-choice"><strong>Join community play?</strong><span>If you join, completed drives send GPS briefly for road matching and earn shared XP and territory. Other players may see your name on roads you capture, including quiet roads near places you visit. If you stay private, you won’t see other players’ scores or roads.</span></div>
+      <div className="welcome-choice"><strong>Join community play?</strong><span>If you join, road segments are sent for matching while you drive so territory visits count immediately. Your completed trip, XP, distance and height are shared when you finish and save. Other players may see your name on roads you later capture, including quiet roads near places you visit. If you stay private, you won’t see other players’ scores or roads.</span></div>
       <button className="pink-button sheet-action" disabled={profileBusy} onClick={() => void saveCloudProfile(true).then(saved => { if (saved) finishWelcome(); })}>{profileBusy ? 'Joining…' : 'Join community play'}</button>
       <button className="subtle-action sheet-action" onClick={finishWelcome}>Not now — keep my drives private</button>
       <small>You can change this later in Profile → Settings. The map needs location permission to navigate; sharing is separate.</small>
+    </section></div>}
+
+    {!showWelcome && authUser && cloudProfile?.community_opt_in && !cloudProfile.live_territory_consent_at && !dismissedLiveConsent && !driving && <div className="sheet-backdrop welcome-backdrop"><section className="bottom-sheet welcome-sheet" aria-label="Territory sharing has changed">
+      <div className="sheet-header"><h2>Territory sharing has changed</h2><button onClick={() => setDismissedLiveConsent(true)} aria-label="Not now"><X size={22} /></button></div>
+      <p>To count roads without ending a drive, Guava now sends short GPS segments for road matching while a community drive is active. Only matched road visits are stored for territory. Your XP, distance, height and finished trip still share when you save.</p>
+      <p>Captured roads can reveal where you travel. This is optional.</p>
+      <button className="pink-button sheet-action" disabled={profileBusy} onClick={() => void saveCloudProfile(true).then(saved => { if (saved) setDismissedLiveConsent(true); })}>{profileBusy ? 'Saving…' : 'Enable live territory visits'}</button>
+      <button className="subtle-action sheet-action" onClick={() => setDismissedLiveConsent(true)}>Not now — new drives stay private</button>
     </section></div>}
 
     {panel === 'maps' && <div className="sheet-backdrop" onClick={() => setPanel('none')}><section className="bottom-sheet map-sheet" onClick={event => event.stopPropagation()}>
@@ -627,9 +663,9 @@ export default function App() {
 
     {panel === 'drive' && driving && <div className="sheet-backdrop" onClick={() => setPanel('none')}><section className="bottom-sheet" onClick={event => event.stopPropagation()}>
       <div className="sheet-header"><h2>End this drive?</h2><button onClick={() => setPanel('none')} aria-label="Close"><X size={22} /></button></div>
-      <p>Save your progress after parking. A drive under 50 metres earns nothing.</p>
+      <p>Save your trip and shared XP after parking. On an opted-in drive, territory visits already synced will still count if you discard the trip record.</p>
       <button className="sheet-action pink-button" onClick={() => endDrive(true)}>Finish & Save</button>
-      <button className="sheet-action subtle-action" onClick={() => endDrive(false)}>Discard Drive</button>
+      <button className="sheet-action subtle-action" onClick={() => endDrive(false)}>Discard trip record</button>
       <button className="sheet-action text-action" onClick={() => setPanel('none')}>Keep Driving</button>
     </section></div>}
 
@@ -639,19 +675,19 @@ export default function App() {
       <div className="stats-grid"><div><Navigation /><small>Total distance</small><strong>{fmtDistance(totalDistance)}</strong></div><div><Timer /><small>Drive time</small><strong>{fmtTime(totalTime / 1000)}</strong></div><div><Mountain /><small>Height traveled</small><strong>{fmtDistance(totalHeight)}</strong></div><div><Flag /><small>Road explored*</small><strong>{fmtDistance(totalUnits * 25)}</strong></div></div>
       <h3>Personal insights</h3><div className="stats-grid"><div><Navigation /><small>Average speed</small><strong>{totalTime > 0 ? `${Math.round(totalDistance / (totalTime / 1000) * 3.6)} km/h` : '—'}</strong></div><div><Mountain /><small>Highest altitude</small><strong>{Number.isFinite(highestAltitude) ? `${Math.round(highestAltitude)} m` : '—'}</strong></div></div>
       <h3>Recent drives</h3>{trips.length ? trips.slice(0, 8).map(trip => <div className="history-row" key={trip.id}><span><strong>{trip.destination || 'Quick Start'}</strong><small>{new Date(trip.endedAt).toLocaleDateString()} · {fmtDistance(trip.distanceMeters)} · {fmtTime((trip.endedAt - trip.startedAt) / 1000)} · {Math.round(trip.heightMeters)} m height · {trip.communityStatus === 'uploaded' ? 'shared' : trip.communityStatus === 'pending' ? 'waiting to share' : 'private'}</small></span><strong>+{trip.xp} XP</strong></div>) : <p className="empty-note">Your finished drives will appear here.</p>}
-      <p className="privacy-note">Full GPS tracks stay in this browser. If you opt into community play, finished drives are briefly sent for road matching; only road sections and scores are stored for the shared game. Browser recording may stop when locked or backgrounded. *Road explored is a local estimate.</p></div>
+      <p className="privacy-note">Full GPS tracks stay in this browser. With community play on, short segments are sent for road matching during a drive so private territory visits count then; completed drives are sent for XP, distance and height when saved. Only road visits and scores are stored for the shared game. Browser recording may stop when locked or backgrounded. *Road explored is a local estimate.</p></div>
     </div>}
 
     {panel === 'settings' && <div className="full-screen-panel"><div className="full-header"><button onClick={() => setPanel('profile')} aria-label="Back to profile"><ArrowLeft /></button><h2>Settings</h2><span /></div><div className="profile-body">
       <h3>Account</h3><label className="settings-label">Display name<input value={profileName} maxLength={32} onChange={event => { setProfileName(event.target.value); localStorage.setItem('guava.web.name', event.target.value); }} /></label>
       {authUser ? <><p className="empty-note">Signed in as {authUser.email}. Drive tracks are saved in this browser.</p>
         <label className="settings-label community-toggle">Join community play <input type="checkbox" checked={communityOptIn} disabled={!cloudProfile || profileBusy} onChange={event => setCommunityOptIn(event.target.checked)} /></label>
-        <p className="privacy-note">When on, newly finished drives count toward shared XP, leaderboards and daily territory. Other signed-in drivers can see your name on captured road sections. A quiet road may reveal where you travel, including near home or work. Turning this off deletes your cloud game progress, but keeps local drives in this browser.</p>
+        <p className="privacy-note">When on, short GPS segments are sent for road matching during a drive so territory visits count immediately, even if the drive ends after midnight. A completed trip adds shared XP, distance and height only when saved. Other participating drivers can see your name on roads you capture after the daily round. Quiet roads may reveal where you travel, including near home or work. Turning this off deletes cloud game progress, but keeps local drives in this browser.</p>
         <button className="pink-button sheet-action" disabled={!cloudProfile || profileBusy} onClick={() => void saveCloudProfile()}>{profileBusy ? 'Saving…' : 'Save profile'}</button>
         <button className="subtle-action sheet-action" onClick={() => void checkCommunityConnection()}>Check community connection</button>
         {connectionResult && <p className="empty-note" role="status">{connectionResult}</p>}
         <button className="subtle-action sheet-action" disabled={authBusy} onClick={() => void signOut()}>Sign out</button></> : isSupabaseConfigured ? <button className="pink-button sheet-action" disabled={authBusy} onClick={() => void googleSignIn()}>{authBusy ? 'Connecting…' : 'Continue with Google'}</button> : <p className="empty-note">Google sign-in awaits Guava’s separate Supabase project. You can still test the map and local progress.</p>}
-      <h3>Navigation & privacy</h3><p className="privacy-note">Guava requests location while its web page is open. It records a trip only after you tap Start, and you choose Save or Discard when ending it. Full GPS tracks are stored only in this browser; an opted-in drive is briefly sent for road matching and community scores. Browser recording may pause when locked or backgrounded. <a href={privacyUrl} target="_blank" rel="noreferrer">Read the alpha privacy notice</a>.</p>
+      <h3>Navigation & privacy</h3><p className="privacy-note">Guava requests location while its web page is open. It records a trip only after you tap Start, and you choose Save or Discard when ending it. Full GPS tracks are stored only in this browser; opted-in territory segments are matched while driving, with summary scores shared after Save. Browser recording may pause when locked or backgrounded. <a href={privacyUrl} target="_blank" rel="noreferrer">Read the alpha privacy notice</a>.</p>
       <button className="subtle-action sheet-action" onClick={() => { const blob = new Blob([JSON.stringify(trips, null, 2)], { type: 'application/json' }); const url = URL.createObjectURL(blob); const link = document.createElement('a'); link.href = url; link.download = 'guava-drives.json'; link.click(); window.setTimeout(() => URL.revokeObjectURL(url), 1000); }}>Export my local drives</button>
     </div></div>}
 
@@ -661,7 +697,7 @@ export default function App() {
         <div className="xp-card score-card"><small>{communityOptIn ? `YOUR SHARED ${leaderboardMetric.toUpperCase()}` : `YOUR LOCAL ${leaderboardMetric.toUpperCase()}`}</small><strong>{communityOptIn ? liveRankValue(leaderboardMetric === 'XP' ? cloudScore?.xp || 0 : leaderboardMetric === 'Distance' ? cloudScore?.distance_m || 0 : leaderboardMetric === 'Height' ? cloudScore?.height_m || 0 : cloudScore?.territory_m || 0) : localMetric}</strong><span>{communityOptIn ? 'Scores from verified community drives.' : 'Join community play in Settings to appear on the live board.'}</span></div>
         {cloudError && <p className="empty-note">Community connection: {cloudError}</p>}
         {!communityOptIn && <button className="pink-button sheet-action" onClick={() => setPanel('settings')}>Join community play</button>}
-        {leaderboardMetric === 'Territory' && <div className="round-clock"><span>TERRITORY · DAILY UTC ROUNDS</span><strong>{cloudGame?.lastSettlement ? `Last settled ${cloudGame.lastSettlement}` : 'First territory round not settled yet'}</strong><small>Each road section goes to the driver with the most separate drives that day. A tie clears the owner. Unvisited roads keep their owner. The next round settles at 00:05 UTC.</small></div>}
+        {leaderboardMetric === 'Territory' && <div className="round-clock"><span>TERRITORY · ISRAEL CALENDAR DAYS</span><strong>{cloudGame?.lastSettlement ? `Last finalized ${cloudGame.lastSettlement}` : 'First territory round not finalized yet'}</strong><small>Visits count while you drive. Each road section goes to the driver with the most separate drives that day. Ties clear the owner; unvisited roads keep theirs. Yesterday’s result becomes final at about 09:05 Israel time so late uploads can arrive.</small></div>}
         {liveRankings.length ? <div className="ranking-list">{liveRankings.map((entry, index) => <div key={entry.id}><b>{index + 1}</b><span className="ranking-dot" style={{ background: entry.color }} /><strong>{entry.name}</strong><span>{liveRankValue(entry.value)}</span>{leaderboardMetric === 'Territory' && <button className="rank-map-button" onClick={() => viewLiveMap('Territory', entry.id)}>Map</button>}</div>)}</div> : <p className="empty-note">{communityOptIn ? 'No shared drives yet. The first opted-in drive starts the board.' : 'Join community play to see other players and appear on the board.'}</p>}
         <button className="subtle-action sheet-action" onClick={() => viewLiveMap('Territory')}>View live territory</button>
         <button className="subtle-action sheet-action" onClick={() => viewLiveMap('Road Pulse')}>View shared road use</button>
@@ -684,7 +720,7 @@ export default function App() {
     {panel === 'recap' && lastTrip && <div className="full-screen-panel"><div className="full-header"><button onClick={() => setPanel('none')}><X /></button><h2>Drive complete</h2><Flag size={20} /></div><div className="profile-body">
       <div className="xp-card"><small>YOU EARNED</small><strong>+{lastTrip.xp} XP</strong><span>{lastTrip.destination || 'Quick Start'} · {fmtClock(lastTrip.endedAt)}</span></div>
       <div className="stats-grid"><div><Navigation /><small>Distance</small><strong>{fmtDistance(lastTrip.distanceMeters)}</strong></div><div><Timer /><small>Time</small><strong>{fmtTime((lastTrip.endedAt - lastTrip.startedAt) / 1000)}</strong></div><div><Mountain /><small>Height</small><strong>{fmtDistance(lastTrip.heightMeters)}</strong></div><div><Flag /><small>New road*</small><strong>{fmtDistance(lastTrip.newRoadUnits * 25)}</strong></div></div>
-      <p className="privacy-note">{lastTrip.communityStatus === 'uploaded' ? 'Added to the community leaderboard. Territory ownership settles at 00:05 UTC.' : lastTrip.communityStatus === 'pending' ? `Saved here, but not yet shared. ${cloudError || 'Guava is checking the roads.'}` : 'Private drive saved on this device. Join community play in Settings before your next drive to compete.'} *Road is approximate local exploration, not awarded territory.</p>
+      <p className="privacy-note">{lastTrip.communityStatus === 'uploaded' ? 'Added to the community leaderboard. Territory visits were banked during the drive; ownership becomes final at about 09:05 Israel time the next morning.' : lastTrip.communityStatus === 'pending' ? `Saved here, but not yet fully shared. ${cloudError || 'Guava is checking the roads.'}` : 'Private drive saved on this device. Join community play in Settings before your next drive to compete.'} *Road is approximate local exploration, not awarded territory.</p>
       {lastTrip.communityStatus === 'pending' && <button className="subtle-action sheet-action" onClick={() => { uploadingRef.current.delete(lastTrip.id); setTrips(current => [...current]); }}>Retry sharing</button>}
       <button className="pink-button sheet-action" onClick={() => setPanel('none')}>Back to map</button>
     </div></div>}

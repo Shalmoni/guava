@@ -1,4 +1,4 @@
-import type { Point, Trip } from './model';
+import type { DrivePoint, Point, Trip } from './model';
 import { territoryColor } from './game';
 import { supabase } from './supabase';
 
@@ -18,7 +18,7 @@ export type CloudRoad = {
   traversal_count: number;
   unique_drivers: number;
 };
-export type CloudProfile = { user_id: string; display_name: string; community_opt_in: boolean };
+export type CloudProfile = { user_id: string; display_name: string; community_opt_in: boolean; live_territory_consent_at: string | null };
 export type CloudDrive = {
   id: string;
   started_at: string;
@@ -69,6 +69,19 @@ export async function uploadCommunityDrive(trip: Trip): Promise<{ xp: number; di
     return { xp: Number(existing.xp), distance_m: Number(existing.distance_m), height_m: Number(existing.height_m) };
   }
   return { xp: Number(data.xp || 0), distance_m: Number(data.distance_m || 0), height_m: Number(data.height_m || 0) };
+}
+
+export async function bankTerritorySegment(sessionId: string, startedAt: number, points: DrivePoint[]): Promise<number> {
+  if (!supabase) throw new Error('Guava community is not connected.');
+  const { data, error } = await supabase.functions.invoke('record-territory', {
+    body: { sessionId, startedAt, points },
+  });
+  if (error) {
+    const response = 'context' in error ? (error as { context?: Response }).context : undefined;
+    const payload = response ? await response.clone().json().catch(() => null) as { error?: string } | null : null;
+    throw new Error(payload?.error || error.message);
+  }
+  return Number(data?.banked || 0);
 }
 
 export function cloudRankings(game: CloudGame, metric: 'XP' | 'Distance' | 'Height' | 'Territory', me: string) {

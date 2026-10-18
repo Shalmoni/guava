@@ -2,17 +2,16 @@
 
 Guava is a mobile-first driving map and road-territory game. The shareable app is the web build in `web/`, deployed through GitHub Pages at [shalmoni.github.io/guava](https://shalmoni.github.io/guava/). The older iOS prototype in `Mappy/` is a design reference, not the app that link opens.
 
-The alpha requires Google sign-in. Community play is opt-in and off by default. A player can explore the map and save private drives without joining the shared game. After opting in, **newly finished** drives can add shared XP, distance, height traveled, road use and daily territory. Older private drives are not silently uploaded.
+The alpha requires Google sign-in. Community play is opt-in and off by default. A player can explore the map and save private drives without joining the shared game. After explicit consent to the live-territory notice, road-unit visits sync during opted-in drives; shared XP, distance, and height update only after a finished drive is saved. Older private drives are not silently uploaded.
 
 ## Rules
 
-- Drives shorter than 50 m do not score. Guava records only after Start and saves only after Finish & Save.
-- The authenticated `submit-drive` Supabase function validates GPS timing and movement, map-matches sampled coordinates against OSRM, then writes a summary and short road-cell geometry. Full GPS samples remain in the browser, not the hosted database.
-- Each separate verified drive contributes one vote per road cell, regardless of loops or travel direction. A daily UTC round settles at 00:05 the following day. The unique top driver wins; ties clear ownership; untouched cells keep their owner.
-- **Current cutoff limitation:** a whole drive is assigned to the UTC date when it ends. A drive crossing midnight is not split by the time each road was traveled; this can reward stopping before midnight. It must be redesigned before territory competition is considered fair.
+- Territory live sync begins only after at least 50 m of accepted driving. Its authenticated `record-territory` function validates movement and map-matches short segments via OSRM; private visits are banked while driving. They remain counted even if the driver later discards the trip record. Full raw GPS traces are not stored in the hosted database.
+- The authenticated `submit-drive` function validates the complete drive, map-matches sampled coordinates, fills missed road visits, and writes the summary plus XP/distance/height only after Finish & Save.
+- Each session contributes at most one vote per road cell per Israel-calendar day, regardless of loops or travel direction. The daily contest closes at local midnight; ownership becomes final at about 09:05 Israel time the following morning to admit late uploads. The unique top driver wins; ties clear ownership; untouched cells keep their owner.
 - Territory paints only captured road sections. A tap identifies the owner and approximate section length. Road Pulse shows community roads only after three distinct opted-in drivers have used them. Names are displayed only for participants.
 - The live leaderboard uses hosted scores. The clearly labeled Game Lab remains a separate ten-player simulation for reviewing how a populated map might look.
-- Turning community play off deletes that player's shared drive summaries, scores and ownership; local browser drives remain.
+- Turning community play off deletes that player's shared drive summaries, scores, live visits and ownership; local browser drives remain.
 
 ## Limits — important for testers
 
@@ -35,4 +34,4 @@ npm run dev
 
 `npm run build` creates `web/dist`. Pushes to `main` deploy through `.github/workflows/deploy-pages.yml`. The workflow reads the public `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` GitHub variables and sets `VITE_REQUIRE_AUTH=true`. Never put a Supabase service-role key or Google OAuth client secret into `VITE_*` variables or the repository.
 
-The hosted Guava Supabase project is separate from other products. `supabase/migrations/` records the profile and game schema, `supabase/functions/submit-drive/` contains the authenticated ingestion function, and a `pg_cron` job settles territory daily. `supabase/drafts/` is not deployed. Browser drives are stored in `localStorage` and can be exported in Settings.
+The hosted Guava Supabase project is separate from other products. `supabase/migrations/` records the profile and game schema, `supabase/functions/record-territory/` banks active-drive visits, `supabase/functions/submit-drive/` saves completed scores, and a `pg_cron` job finalizes territory daily. `supabase/drafts/` is not deployed. Browser drives are stored in `localStorage` and can be exported in Settings.
