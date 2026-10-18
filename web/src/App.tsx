@@ -34,6 +34,11 @@ function statValue(value: number, suffix = '') {
   return `${Math.round(value).toLocaleString()}${suffix}`;
 }
 
+function liveTime(seconds: number) {
+  const whole = Math.max(0, Math.floor(seconds));
+  return `${String(Math.floor(whole / 60)).padStart(2, '0')}:${String(whole % 60).padStart(2, '0')}`;
+}
+
 export default function App() {
   const [view, setView] = useState<MapView>('Regular');
   const [roadScope, setRoadScope] = useState<RoadScope>('Everybody');
@@ -41,6 +46,7 @@ export default function App() {
   const [position, setPosition] = useState<Point | null>(null);
   const [heading, setHeading] = useState<number | null>(null);
   const [altitude, setAltitude] = useState<number | null>(null);
+  const [gpsAltitudeAvailable, setGpsAltitudeAvailable] = useState(false);
   const [locationError, setLocationError] = useState('');
   const [trips, setTrips] = useState<Trip[]>(loadTrips);
   const [routeOptions, setRouteOptions] = useState<DrivingRoute[]>([]);
@@ -70,6 +76,7 @@ export default function App() {
   const [connectionResult, setConnectionResult] = useState('');
   const [communityOptIn, setCommunityOptIn] = useState(false);
   const [profileBusy, setProfileBusy] = useState(false);
+  const [showWelcome, setShowWelcome] = useState(false);
   const [leaderboardMetric, setLeaderboardMetric] = useState<'XP' | 'Distance' | 'Height' | 'Territory'>('XP');
   const [demoRoads, setDemoRoads] = useState<RoadPiece[][] | null>(null);
   const [weekScene, setWeekScene] = useState<WeekScene | null>(null);
@@ -176,7 +183,13 @@ export default function App() {
   }, [authUser?.id, cloudProfile?.community_opt_in, trips]);
 
   useEffect(() => {
-    if (requiresAccount && !authUser) return;
+    if (authUser && cloudProfile && !cloudProfile.community_opt_in) setShowWelcome(localStorage.getItem(`guava.welcome.${authUser.id}`) !== 'done');
+    else setShowWelcome(false);
+  }, [authUser?.id, cloudProfile?.user_id]);
+
+  useEffect(() => {
+    if (requiresAccount && (!authUser || !cloudProfile || showWelcome
+      || (!cloudProfile.community_opt_in && localStorage.getItem(`guava.welcome.${authUser.id}`) !== 'done'))) return;
     if (!navigator.geolocation) {
       setLocationError('This browser does not support location.');
       return;
@@ -186,14 +199,18 @@ export default function App() {
       setPosition(next);
       lastPositionRef.current = next;
       if (fix.coords.heading != null && Number.isFinite(fix.coords.heading)) setHeading(fix.coords.heading);
-      if (fix.coords.altitude != null && fix.coords.altitudeAccuracy != null && fix.coords.altitudeAccuracy <= 35) setAltitude(fix.coords.altitude);
+      const deviceAltitude = fix.coords.altitude != null && Number.isFinite(fix.coords.altitude)
+        && (fix.coords.altitudeAccuracy == null || fix.coords.altitudeAccuracy <= 50)
+        ? fix.coords.altitude : null;
+      setGpsAltitudeAvailable(deviceAltitude != null);
+      if (deviceAltitude != null) setAltitude(deviceAltitude);
       setLocationError('');
       const current = driveRef.current;
       if (!current || fix.coords.accuracy > 50) return;
       const previous = current.points.at(-1);
       const movement = previous ? distanceMeters(previous.position, next) : 0;
-      if (previous && (movement < 5 || movement > 300)) return;
-      const sample: DrivePoint = { position: next, timestamp: fix.timestamp, altitude: fix.coords.altitudeAccuracy != null && fix.coords.altitudeAccuracy <= 30 ? fix.coords.altitude : null };
+      if (previous && (movement < 2 || movement > 300)) return;
+      const sample: DrivePoint = { position: next, timestamp: fix.timestamp, altitude: deviceAltitude };
       let height = current.height;
       let altitudeAnchor = current.altitudeAnchor;
       if (sample.altitude != null) {
@@ -209,18 +226,20 @@ export default function App() {
       enableHighAccuracy: true, maximumAge: 2000, timeout: 15000,
     });
     return () => navigator.geolocation.clearWatch(watcher);
-  }, [authUser?.id]);
+  }, [authUser?.id, cloudProfile?.user_id, cloudProfile?.community_opt_in, showWelcome]);
 
+  const elevationGrid = position ? `${(Math.round(position[0] * 2000) / 2000).toFixed(4)},${(Math.round(position[1] * 2000) / 2000).toFixed(4)}` : '';
   useEffect(() => {
-    if (altitude != null || !position) return;
+    if (gpsAltitudeAvailable || !elevationGrid) return;
     let cancelled = false;
     const controller = new AbortController();
-    fetch(`https://api.open-meteo.com/v1/elevation?latitude=${position[1].toFixed(4)}&longitude=${position[0].toFixed(4)}`, { signal: controller.signal })
+    const [longitude, latitude] = elevationGrid.split(',');
+    fetch(`https://api.open-meteo.com/v1/elevation?latitude=${latitude}&longitude=${longitude}`, { signal: controller.signal })
       .then(result => result.json())
       .then(data => { if (!cancelled && typeof data.elevation?.[0] === 'number') setAltitude(data.elevation[0]); })
       .catch(() => {});
     return () => { cancelled = true; controller.abort(); };
-  }, [position && `${position[0].toFixed(3)},${position[1].toFixed(3)}`, altitude]);
+  }, [elevationGrid, gpsAltitudeAvailable]);
 
   useEffect(() => {
     if (panel !== 'search' || searchText.trim().length < 3) {
@@ -274,8 +293,8 @@ export default function App() {
     setDemoMode(false);
     const start: LiveDrive = {
       startedAt: Date.now(),
-      points: [{ position, altitude, timestamp: Date.now() }],
-      distance: 0, height: 0, altitudeAnchor: altitude,
+      points: [{ position, altitude: gpsAltitudeAvailable ? altitude : null, timestamp: Date.now() }],
+      distance: 0, height: 0, altitudeAnchor: gpsAltitudeAvailable ? altitude : null,
       share: Boolean(authUser && cloudProfile?.community_opt_in),
     };
     driveRef.current = start;
@@ -346,8 +365,8 @@ export default function App() {
     return layers;
   }, [demoMode, demoScenario, demoRoads, demoResult, weekLayers]);
   const demoPulse = demoMode && demoScenario === 'week' ? weekLayers?.pulse || null : null;
-  const liveTerritory = !demoMode && cloudGame && authUser ? cloudTerritoryLayers(cloudGame, authUser.id) : null;
-  const livePulse = !demoMode && cloudGame ? cloudPulseLayers(cloudGame) : null;
+  const liveTerritory = !demoMode && communityOptIn && cloudGame && authUser ? cloudTerritoryLayers(cloudGame, authUser.id) : null;
+  const livePulse = !demoMode && communityOptIn && cloudGame ? cloudPulseLayers(cloudGame) : null;
   const selectedUnitOwner = selectedTerritory && (demoMode
     ? demoResult?.owners.get(selectedTerritory.unitId) === selectedTerritory.ownerId
     : cloudGame?.roads.some(road => road.id === selectedTerritory.unitId && road.owner_id === selectedTerritory.ownerId))
@@ -359,7 +378,7 @@ export default function App() {
       : cloudGame?.profiles.find(profile => profile.user_id === selectedTerritoryOwner)?.display_name || 'Driver';
   const cloudScore = cloudGame?.scores.find(score => score.user_id === authUser?.id);
   const displayXP = communityOptIn ? cloudScore?.xp || 0 : totalXP;
-  const liveRankings = cloudGame && authUser ? cloudRankings(cloudGame, leaderboardMetric, authUser.id) : [];
+  const liveRankings = communityOptIn && cloudGame && authUser ? cloudRankings(cloudGame, leaderboardMetric, authUser.id) : [];
   const liveRankValue = (value: number) => leaderboardMetric === 'XP' ? `${value.toLocaleString()} XP` : fmtDistance(value);
   const localMetric = leaderboardMetric === 'XP' ? `${totalXP.toLocaleString()} XP`
     : leaderboardMetric === 'Distance' ? fmtDistance(totalDistance)
@@ -431,25 +450,33 @@ export default function App() {
     if (authError) setError(authError.message);
   }
 
-  async function saveCloudProfile() {
-    if (!supabase || !authUser || !cloudProfile) return;
+  async function saveCloudProfile(nextOptIn = communityOptIn): Promise<boolean> {
+    if (!supabase || !authUser || !cloudProfile) return false;
     const name = profileName.trim();
-    if (!name || name.length > 32) { setError('Choose a name between 1 and 32 characters.'); return; }
-    if (cloudProfile.community_opt_in && !communityOptIn && !window.confirm('Leave community play? This removes your shared scores, drives and captured roads. Drives saved in this browser remain here.')) return;
+    if (!name || name.length > 32) { setError('Choose a name between 1 and 32 characters.'); return false; }
+    if (cloudProfile.community_opt_in && !nextOptIn && !window.confirm('Leave community play? This removes your shared scores, drives and captured roads. Drives saved in this browser remain here.')) return false;
     setProfileBusy(true);
     const { data, error: profileError } = await supabase.from('guava_profiles')
-      .update({ display_name: name, community_opt_in: communityOptIn })
+      .update({ display_name: name, community_opt_in: nextOptIn })
       .eq('user_id', authUser.id).select('user_id,display_name,community_opt_in').single();
     setProfileBusy(false);
-    if (profileError) { setError(`Could not save your profile: ${profileError.message}`); return; }
+    if (profileError) { setError(`Could not save your profile: ${profileError.message}`); return false; }
     setCloudProfile(data as CloudProfile);
+    setCommunityOptIn(nextOptIn);
     localStorage.setItem('guava.web.name', name);
-    if (cloudProfile.community_opt_in && !communityOptIn) setTrips(current => {
+    if (cloudProfile.community_opt_in && !nextOptIn) setTrips(current => {
       const updated = current.map(trip => ({ ...trip, communityStatus: undefined }));
       saveTrips(updated);
       return updated;
     });
     void loadCloudGame().then(setCloudGame).catch(cause => setCloudError(cause instanceof Error ? cause.message : 'Could not refresh community.'));
+    return true;
+  }
+
+  function finishWelcome() {
+    if (!authUser) return;
+    localStorage.setItem(`guava.welcome.${authUser.id}`, 'done');
+    setShowWelcome(false);
   }
 
   async function checkCommunityConnection() {
@@ -465,8 +492,8 @@ export default function App() {
   if (requiresAccount && (!authReady || !authUser)) return <main className="signin-screen">
     <div className="signin-card">
       <div className="signin-brand"><span className="brand-dot" /> Guava</div>
-      <h1>Every road is a little adventure.</h1>
-      <p>Sign in to start exploring. Community play is optional; full drive tracks stay in this browser.</p>
+      <h1>Let’s go.</h1>
+      <p>Sign in to open your map.</p>
       {!authReady ? <p className="signin-wait">Checking your session…</p> : isSupabaseConfigured ?
         <button className="pink-button" disabled={authBusy} onClick={() => void googleSignIn()}>{authBusy ? 'Connecting…' : 'Continue with Google'}</button> :
         <p className="signin-wait">Sign-in is being set up. Please try again later.</p>}
@@ -492,10 +519,6 @@ export default function App() {
       <label className="week-day-control">Day {weekDay} of 7 · {weekSnapshot.driveCount} simulated drives<input type="range" min="1" max="7" value={weekDay} onChange={event => { setWeekDay(Number(event.target.value)); setSelectedTerritory(null); }} aria-label="Week simulation day" /></label>
       {view === 'Territory' ? <div className="week-legend"><span><i style={{ background: DEMO_DRIVERS.you.color }} />You</span><span><i style={{ background: 'linear-gradient(90deg,#67b8a2,#e9af66,#a987c4)' }} />Other drivers</span><span className="legend-hint">Ties stay uncolored · tap a colored road for owner and length</span></div> : <div className="week-pulse-legend"><span>Less used</span><i /><i /><i /><i /><span>More used</span></div>}
       <small>Simulation only · {view === 'Road Pulse' ? 'roads need 3+ drivers to appear' : `you own ${fmtDistance(territoryScores(weekSnapshot.result.owners).you)} · ties have no color`}</small>
-    </div>}
-    {!demoMode && view === 'Territory' && !driving && <div className="week-map-card live-map-card">
-      <div className="week-map-heading"><strong>LIVE TERRITORY</strong><button onClick={() => setPanel('leaderboard')}>Scores ↗</button></div>
-      <small>{cloudGame?.roads.filter(road => road.owner_id).length || 0} captured road sections · ownership settles daily at 00:05 UTC · ties stay uncolored</small>
     </div>}
 
     {view === 'Territory' && selectedTerritoryOwner && !driving && <div className="territory-inspector">
@@ -570,25 +593,34 @@ export default function App() {
           <div><strong>{fmtDistance(remaining)}</strong><small>TO GO</small></div>
           <div><strong>{fmtClock(now + estimatedSeconds * 1000)}</strong><small>ARRIVAL</small></div>
         </> : <>
-          <div><strong>{fmtTime(driveSeconds)}</strong><small>TIME</small></div>
+          <div><strong>{liveTime(driveSeconds)}</strong><small>DRIVE TIME</small></div>
           <div><strong>{fmtDistance(live?.distance || 0)}</strong><small>DISTANCE</small></div>
-          <div><strong>{statValue(live?.height || 0, ' m')}</strong><small>HEIGHT</small></div>
-          <div><strong>{fmtDistance(localRoadUnits * 25)}</strong><small>ROAD*</small></div>
+          <div><strong>{live?.altitudeAnchor == null ? '—' : statValue(live?.height || 0, ' m')}</strong><small>UP + DOWN</small></div>
+          <div><strong>{fmtDistance(localRoadUnits * 25)}</strong><small>ROAD EXPLORED*</small></div>
         </>}
       </div>
       <div className="dock-footer">
         <button className="dock-stop" onClick={() => setPanel('drive')} aria-label="End drive"><Square size={16} fill="currentColor" /></button>
-        {selected && <button className="dock-mode" onClick={() => setDriveMode(value => value === 'Navigation' ? 'Game' : 'Navigation')}>{driveMode === 'Navigation' ? 'Game view' : 'Navigation view'} <ChevronDown size={16} /></button>}
+        {selected && <button className="dock-mode" onClick={() => setDriveMode(value => value === 'Navigation' ? 'Game' : 'Navigation')}>{driveMode === 'Navigation' ? 'Show progress' : 'Show route'} <ChevronDown size={16} /></button>}
         <button className="dock-map" onClick={() => setPanel('maps')}><Layers3 size={17} /> Map</button>
       </div>
     </div>}
+
+    {showWelcome && authUser && cloudProfile && !driving && <div className="sheet-backdrop welcome-backdrop"><section className="bottom-sheet welcome-sheet" aria-label="Welcome to Guava">
+      <div className="sheet-header"><h2>Welcome to Guava</h2><button onClick={finishWelcome} aria-label="Not now"><X size={22} /></button></div>
+      <p>Drive with the map and explore roads. After this screen, your browser will ask for location so Guava can show where you are and record drives on this device.</p>
+      <div className="welcome-choice"><strong>Join community play?</strong><span>If you join, completed drives send GPS briefly for road matching and earn shared XP and territory. Other players may see your name on roads you capture, including quiet roads near places you visit. If you stay private, you won’t see other players’ scores or roads.</span></div>
+      <button className="pink-button sheet-action" disabled={profileBusy} onClick={() => void saveCloudProfile(true).then(saved => { if (saved) finishWelcome(); })}>{profileBusy ? 'Joining…' : 'Join community play'}</button>
+      <button className="subtle-action sheet-action" onClick={finishWelcome}>Not now — keep my drives private</button>
+      <small>You can change this later in Profile → Settings. The map needs location permission to navigate; sharing is separate.</small>
+    </section></div>}
 
     {panel === 'maps' && <div className="sheet-backdrop" onClick={() => setPanel('none')}><section className="bottom-sheet map-sheet" onClick={event => event.stopPropagation()}>
       <div className="sheet-header"><h2>Change your world</h2><button onClick={() => setPanel('none')} aria-label="Close"><X size={22} /></button></div>
       <p>Switch views anytime. Everything in this preview is free.</p>
       <div className="view-list">{mapViews.map(option => <button key={option} disabled={option === 'Satellite' && !hasSatellite} className={view === option ? 'active' : ''} onClick={() => { setView(option); setPanel('none'); }}>
         <span className="view-icon">{option === 'Altitude' ? <Mountain /> : option === 'Road Pulse' ? <Route /> : option === 'Satellite' ? <Globe2 /> : option === 'Territory' ? <Flag /> : <MapIcon />}</span>
-        <span><strong>{option}</strong><small>{option === 'Satellite' && !hasSatellite ? 'Imagery provider not connected yet' : option === 'Road Pulse' ? 'How often roads are used' : option === 'Territory' ? 'Daily captured road sections' : option === 'Altitude' ? 'Elevation colors and current altitude' : option === 'Regular' ? 'Everyday road map' : 'Imagery from above'}</small></span>
+        <span><strong>{option}</strong><small>{option === 'Satellite' && !hasSatellite ? 'Imagery provider not connected yet' : !demoMode && !communityOptIn && (option === 'Road Pulse' || option === 'Territory') ? 'Join community play to see shared roads' : option === 'Road Pulse' ? 'How often roads are used' : option === 'Territory' ? 'Daily captured road sections' : option === 'Altitude' ? 'Elevation colors and current altitude' : option === 'Regular' ? 'Everyday road map' : 'Imagery from above'}</small></span>
         {view === option && <span className="selected-mark">✓</span>}
       </button>)}</div>
     </section></div>}
@@ -629,8 +661,8 @@ export default function App() {
         <div className="xp-card score-card"><small>{communityOptIn ? `YOUR SHARED ${leaderboardMetric.toUpperCase()}` : `YOUR LOCAL ${leaderboardMetric.toUpperCase()}`}</small><strong>{communityOptIn ? liveRankValue(leaderboardMetric === 'XP' ? cloudScore?.xp || 0 : leaderboardMetric === 'Distance' ? cloudScore?.distance_m || 0 : leaderboardMetric === 'Height' ? cloudScore?.height_m || 0 : cloudScore?.territory_m || 0) : localMetric}</strong><span>{communityOptIn ? 'Scores from verified community drives.' : 'Join community play in Settings to appear on the live board.'}</span></div>
         {cloudError && <p className="empty-note">Community connection: {cloudError}</p>}
         {!communityOptIn && <button className="pink-button sheet-action" onClick={() => setPanel('settings')}>Join community play</button>}
-        <div className="round-clock"><span>LIVE GAME · 24-HOUR UTC ROUNDS</span><strong>{cloudGame?.lastSettlement ? `Last settled ${cloudGame.lastSettlement}` : 'First territory round not settled yet'}</strong><small>Each road section goes to the driver with the most separate drives that day. A tie clears the owner. Unvisited roads keep their owner. The next round settles at 00:05 UTC.</small></div>
-        {liveRankings.length ? <div className="ranking-list">{liveRankings.map((entry, index) => <div key={entry.id}><b>{index + 1}</b><span className="ranking-dot" style={{ background: entry.color }} /><strong>{entry.name}</strong><span>{liveRankValue(entry.value)}</span>{leaderboardMetric === 'Territory' && <button className="rank-map-button" onClick={() => viewLiveMap('Territory', entry.id)}>Map</button>}</div>)}</div> : <p className="empty-note">No shared drives yet. The first opted-in drive starts the board.</p>}
+        {leaderboardMetric === 'Territory' && <div className="round-clock"><span>TERRITORY · DAILY UTC ROUNDS</span><strong>{cloudGame?.lastSettlement ? `Last settled ${cloudGame.lastSettlement}` : 'First territory round not settled yet'}</strong><small>Each road section goes to the driver with the most separate drives that day. A tie clears the owner. Unvisited roads keep their owner. The next round settles at 00:05 UTC.</small></div>}
+        {liveRankings.length ? <div className="ranking-list">{liveRankings.map((entry, index) => <div key={entry.id}><b>{index + 1}</b><span className="ranking-dot" style={{ background: entry.color }} /><strong>{entry.name}</strong><span>{liveRankValue(entry.value)}</span>{leaderboardMetric === 'Territory' && <button className="rank-map-button" onClick={() => viewLiveMap('Territory', entry.id)}>Map</button>}</div>)}</div> : <p className="empty-note">{communityOptIn ? 'No shared drives yet. The first opted-in drive starts the board.' : 'Join community play to see other players and appear on the board.'}</p>}
         <button className="subtle-action sheet-action" onClick={() => viewLiveMap('Territory')}>View live territory</button>
         <button className="subtle-action sheet-action" onClick={() => viewLiveMap('Road Pulse')}>View shared road use</button>
         <button className="text-action sheet-action" disabled={demoLoading} onClick={() => void openGameLab()}>{demoLoading ? 'Loading simulation…' : 'Preview a week with 10 demo drivers'}</button>

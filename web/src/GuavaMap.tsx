@@ -4,6 +4,7 @@ import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import type { DrivingRoute, DrivePoint, MapView, Point, RoadScope, Trip } from './model';
 import { ISRAEL_CENTER } from './model';
+import { snapToRoute, traversedRoute } from './navigation';
 import { WEEK_DRIVER_IDS } from './game';
 
 type TerritoryLayer = { color: string; lines: Point[][]; unitIds: string[]; stretchMeters: number[]; width: number };
@@ -119,7 +120,7 @@ function syncMap(map: maplibregl.Map, props: Props) {
       selected === id ? 12 : layer.width, selected && selected !== id ? .3 : .92,
       index => ({ unitId: layer.unitIds[index] || '', ownerId: id, stretchMeters: String(layer.stretchMeters[index] || 0) }));
   }
-  ensureLine(map, 'guava-live', props.view === 'Territory' ? [live] : [], '#e85d82', 10, 0.94);
+  ensureLine(map, 'guava-live', props.view === 'Territory' && !props.routes.length ? [live] : [], '#f4a7bb', 7, 0.86);
   ensureLine(map, 'guava-road-pulse', props.view === 'Road Pulse' && props.roadScope === 'Mine' ? saved : [], '#d35377', 9, 0.22);
   for (let index = 0; index < 4; index++) {
     const layer = props.demoPulse?.[index] || props.livePulse?.[index];
@@ -128,12 +129,16 @@ function syncMap(map: maplibregl.Map, props: Props) {
   ensureLine(map, 'guava-alternatives', props.routes.filter((_, index) => index !== props.selectedRoute).map(route => route.coordinates), '#919aa5', 5, 0.75);
   const selected = props.routes[props.selectedRoute];
   ensureLine(map, 'guava-route', selected ? [selected.coordinates] : [], '#ee668b', 7, 0.96);
+  const snap = props.isDriving && props.position && selected ? snapToRoute(props.position, selected.coordinates) : null;
+  ensureLine(map, 'guava-driven-route', selected && props.isDriving ? [traversedRoute(selected.coordinates, snap)] : [], '#f8b6c6', 7, 0.98);
 }
 
 export default function GuavaMap(props: Props) {
   const nodeRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markerRef = useRef<maplibregl.Marker | null>(null);
+  const followRef = useRef(true);
+  const lastCameraAtRef = useRef(0);
   const styleRef = useRef<'normal' | 'quiet' | 'satellite'>('normal');
   const latest = useRef(props);
   latest.current = props;
@@ -150,6 +155,12 @@ export default function GuavaMap(props: Props) {
     });
     map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-left');
     map.on('style.load', () => syncMap(map, latest.current));
+    const resizeMap = () => map.resize();
+    window.addEventListener('resize', resizeMap);
+    window.addEventListener('orientationchange', resizeMap);
+    map.on('dragstart', () => { followRef.current = false; });
+    map.on('zoomstart', event => { if (event.originalEvent) followRef.current = false; });
+    map.on('rotatestart', event => { if (event.originalEvent) followRef.current = false; });
     map.on('click', event => {
       const current = latest.current;
       if (current.view !== 'Territory') return;
@@ -164,7 +175,7 @@ export default function GuavaMap(props: Props) {
       current.onTerritorySelect(typeof unitId === 'string' && typeof ownerId === 'string' && Number.isFinite(stretchMeters) ? { unitId, ownerId, stretchMeters } : null);
     });
     mapRef.current = map;
-    return () => { markerRef.current?.remove(); markerRef.current = null; map.remove(); mapRef.current = null; };
+    return () => { window.removeEventListener('resize', resizeMap); window.removeEventListener('orientationchange', resizeMap); markerRef.current?.remove(); markerRef.current = null; map.remove(); mapRef.current = null; };
   }, []);
 
   useEffect(() => {
@@ -178,11 +189,13 @@ export default function GuavaMap(props: Props) {
       return;
     }
     syncMap(map, props);
-  }, [props.view, props.roadScope, props.trips, props.livePoints, props.routes, props.selectedRoute, props.demoTerritory, props.liveTerritory, props.demoPulse, props.livePulse, props.selectedTerritoryOwner]);
+  }, [props.view, props.roadScope, props.trips, props.livePoints, props.routes, props.selectedRoute, props.isDriving, props.demoTerritory, props.liveTerritory, props.demoPulse, props.livePulse, props.selectedTerritoryOwner]);
 
   useEffect(() => {
     const map = mapRef.current;
-    const shownPosition = props.demoLocation || props.position;
+    const selected = props.routes[props.selectedRoute];
+    const snap = props.isDriving && props.position && selected ? snapToRoute(props.position, selected.coordinates) : null;
+    const shownPosition = props.demoLocation || snap?.point || props.position;
     if (!map || !shownPosition) return;
     if (!markerRef.current) {
       const marker = document.createElement('div');
@@ -193,11 +206,14 @@ export default function GuavaMap(props: Props) {
       map.easeTo({ center: shownPosition, zoom: 14.5, duration: 650 });
     }
     markerRef.current.setLngLat(shownPosition);
-    markerRef.current.setRotation(props.demoLocation ? 0 : props.heading ?? 0);
-    if (props.isDriving) {
-      map.easeTo({ center: shownPosition, zoom: Math.max(15.5, map.getZoom()), bearing: props.northUp ? 0 : (props.heading ?? map.getBearing()), pitch: 0, duration: 550 });
+    markerRef.current.setRotation(props.demoLocation ? 0 : props.heading ?? snap?.bearing ?? 0);
+    if (props.isDriving && followRef.current) {
+      const now = performance.now();
+      const duration = lastCameraAtRef.current ? Math.min(1600, Math.max(500, (now - lastCameraAtRef.current) * 0.9)) : 700;
+      lastCameraAtRef.current = now;
+      map.easeTo({ center: shownPosition, bearing: props.northUp ? 0 : (props.heading ?? snap?.bearing ?? map.getBearing()), pitch: 0, duration, essential: true });
     }
-  }, [props.position, props.heading, props.isDriving, props.northUp, props.demoLocation]);
+  }, [props.position, props.heading, props.isDriving, props.northUp, props.demoLocation, props.routes, props.selectedRoute]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -211,12 +227,15 @@ export default function GuavaMap(props: Props) {
   useEffect(() => {
     const map = mapRef.current;
     if (!map || props.zoomCommand === 0) return;
+    followRef.current = false;
     if (props.zoomCommand > 0) map.zoomIn(); else map.zoomOut();
   }, [props.zoomCommand]);
 
   useEffect(() => {
     const map = mapRef.current;
     if (!map || props.centerCommand === 0 || !props.position) return;
+    followRef.current = true;
+    lastCameraAtRef.current = 0;
     map.easeTo({ center: props.position, zoom: props.isDriving ? 16 : 14.5, bearing: props.northUp ? 0 : (props.heading ?? 0), pitch: 0, duration: 500 });
   }, [props.centerCommand]);
 

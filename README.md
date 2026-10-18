@@ -9,6 +9,7 @@ The alpha requires Google sign-in. Community play is opt-in and off by default. 
 - Drives shorter than 50 m do not score. Guava records only after Start and saves only after Finish & Save.
 - The authenticated `submit-drive` Supabase function validates GPS timing and movement, map-matches sampled coordinates against OSRM, then writes a summary and short road-cell geometry. Full GPS samples remain in the browser, not the hosted database.
 - Each separate verified drive contributes one vote per road cell, regardless of loops or travel direction. A daily UTC round settles at 00:05 the following day. The unique top driver wins; ties clear ownership; untouched cells keep their owner.
+- **Current cutoff limitation:** a whole drive is assigned to the UTC date when it ends. A drive crossing midnight is not split by the time each road was traveled; this can reward stopping before midnight. It must be redesigned before territory competition is considered fair.
 - Territory paints only captured road sections. A tap identifies the owner and approximate section length. Road Pulse shows community roads only after three distinct opted-in drivers have used them. Names are displayed only for participants.
 - The live leaderboard uses hosted scores. The clearly labeled Game Lab remains a separate ten-player simulation for reviewing how a populated map might look.
 - Turning community play off deletes that player's shared drive summaries, scores and ownership; local browser drives remain.
@@ -18,6 +19,8 @@ The alpha requires Google sign-in. Community play is opt-in and off by default. 
 This is **not safety-grade navigation** and does not have live traffic, dependable closures, speed limits, background GPS, voice instructions, or robust rerouting. Phone browsers can pause location updates when locked or backgrounded. Public Photon and OSRM services can be unavailable or throttled. Use a trusted navigation app for important directions and never operate game controls while driving.
 
 Regular and Altitude views work. Satellite remains disabled until an imagery provider is configured. The friend alpha is Israel-only. Territory cells are approximately 25 m hexes on map-matched roads; nearby parallel roads can still collide in one cell. Scores and matching are experimental, not fraud-proof. See the [alpha privacy notice](https://shalmoni.github.io/guava/privacy.html).
+
+During planned drives, the displayed arrow snaps to the selected route only when the GPS fix is nearby; recorded GPS is never silently altered. Manual zoom or pan pauses camera following, and the recenter control restores the close driving view. Elevation gain/loss needs usable device altitude samples; an unavailable measurement is shown as a dash instead of a false zero.
 
 ## Local development
 
