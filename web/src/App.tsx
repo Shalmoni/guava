@@ -518,7 +518,7 @@ export default function App() {
 
   if (requiresAccount && (!authReady || !authUser)) return <main className="signin-screen">
     <div className="signin-card">
-      <div className="signin-brand"><span className="brand-dot" /> Guava</div>
+      <div className="signin-brand"><img className="brand-logo" src={`${import.meta.env.BASE_URL}guava-logo.png`} alt="" /> Guava</div>
       <h1>Let’s go.</h1>
       <p>Sign in to open your map.</p>
       {!authReady ? <p className="signin-wait">Checking your session…</p> : isSupabaseConfigured ?
@@ -556,7 +556,7 @@ export default function App() {
     </div>}
 
     <div className="top-row">
-      {!driving && <div className="brand-pill"><span className="brand-dot" />Guava <span className="brand-tag">FRIEND ALPHA</span></div>}
+      {!driving && <div className="brand-pill"><img className="brand-logo" src={`${import.meta.env.BASE_URL}guava-logo.png`} alt="" />Guava <span className="brand-tag">FRIEND ALPHA</span></div>}
       {!driving && <button className="round-control profile-control" onClick={() => setPanel('profile')} aria-label="Profile"><UserRound size={23} /></button>}
     </div>
 
