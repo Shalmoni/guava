@@ -1,7 +1,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.117.3';
 
 type Point = [number, number];
-type Fix = { position: Point; altitude: number | null; timestamp: number };
+type Fix = { position: Point; altitude: number | null; timestamp: number; accuracy?: number };
 type Unit = { id: string; line: Point[]; length_m: number };
 const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -61,7 +61,9 @@ function validFix(value: unknown): value is Fix {
     && fix.position[0] >= 34 && fix.position[0] <= 36.5
     && fix.position[1] >= 29 && fix.position[1] <= 34
     && Number.isFinite(fix.timestamp)
-    && (fix.altitude === null || typeof fix.altitude === 'number' && Number.isFinite(fix.altitude));
+    && (fix.altitude === null || typeof fix.altitude === 'number' && Number.isFinite(fix.altitude))
+    && (fix.accuracy === undefined || typeof fix.accuracy === 'number' && Number.isFinite(fix.accuracy)
+      && fix.accuracy >= 0 && fix.accuracy <= 100);
 }
 
 function daySections(points: Fix[]): Fix[][] {
@@ -132,7 +134,8 @@ Deno.serve(async (request: Request) => {
       for (let index = 0; index < sampled.length - 1; index += 9) {
         const batch = sampled.slice(index, index + 10);
         const coordinates = batch.map(fix => `${fix.position[0].toFixed(6)},${fix.position[1].toFixed(6)}`).join(';');
-        const endpoint = `https://router.project-osrm.org/match/v1/driving/${coordinates}?geometries=geojson&overview=full&tidy=true&gaps=ignore`;
+        const radiuses = batch.map(fix => Math.max(5, Math.min(20, fix.accuracy ?? 15))).join(';');
+        const endpoint = `https://router.project-osrm.org/match/v1/driving/${coordinates}?geometries=geojson&overview=full&tidy=true&gaps=ignore&radiuses=${radiuses}`;
         const response = await fetch(endpoint, { signal: AbortSignal.timeout(12000) });
         if (!response.ok) throw new Error('Road matching unavailable');
         const match = await response.json() as {

@@ -6,6 +6,7 @@ export interface DrivePoint {
   position: Point;
   altitude: number | null;
   timestamp: number;
+  accuracy?: number;
 }
 
 export interface Trip {

@@ -233,7 +233,7 @@ export default function App() {
       const previous = current.points.at(-1);
       const movement = previous ? distanceMeters(previous.position, next) : 0;
       if (previous && (movement < 2 || movement > 300)) return;
-      const sample: DrivePoint = { position: next, timestamp: fix.timestamp, altitude: deviceAltitude };
+      const sample: DrivePoint = { position: next, timestamp: fix.timestamp, altitude: deviceAltitude, accuracy: fix.coords.accuracy };
       let height = current.height;
       let altitudeAnchor = current.altitudeAnchor;
       if (sample.altitude != null) {
