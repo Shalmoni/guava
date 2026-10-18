@@ -1,0 +1,16 @@
+{
+  "name": "Guava",
+  "short_name": "Guava",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#ffffff",
+  "icons": [
+    {
+      "src": "guava-logo.png",
+      "sizes": "1254x1254",
+      "type": "image/png"
+    }
+  ]
+}
