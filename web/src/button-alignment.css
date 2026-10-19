@@ -1,0 +1,40 @@
+/* Keep labels optically consistent across the app's action and tab buttons. */
+button {
+  line-height: 1.2;
+  /* Center the visible glyphs, not the font's extra ascender/descender space. */
+  text-box-trim: trim-both;
+  text-box-edge: cap text;
+}
+
+.pink-button,
+.subtle-action,
+.text-action,
+.segmented button,
+.leaderboard-categories button,
+.lab-scenarios button,
+.week-map-tabs button,
+.week-map-heading button,
+.ranking-list .rank-map-button,
+.demo-map-tag,
+.route-options button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.route-options button {
+  flex-direction: column;
+}
+
+.bubble-menu > button:not(.bubble-anchor),
+.dock-mode,
+.dock-map {
+  align-items: center;
+}
+
+/* Rows containing an icon plus a title/description remain readable as rows. */
+.search-results > button,
+.view-list button {
+  text-align: left;
+}
