@@ -107,7 +107,7 @@ Deno.serve(async (request: Request) => {
   const endedAt = points.at(-1)!.timestamp;
   if (startedAt > points[0].timestamp + 120000 || startedAt < Date.now() - 8 * 3600000
       || endedAt > Date.now() + 120000 || endedAt < Date.now() - 9 * 3600000
-      || endedAt - startedAt > 8 * 3600000) return reply(400, { error: 'Territory segment time is outside alpha limits' });
+      || endedAt - startedAt > 8 * 3600000) return reply(400, { error: 'Territory segment time is outside supported limits' });
   let rawDistance = 0;
   for (let index = 0; index < points.length; index++) {
     const fix = points[index];
@@ -159,7 +159,7 @@ Deno.serve(async (request: Request) => {
       p_started_at: new Date(startedAt).toISOString(),
       p_observed_at: new Date(section.at(-1)!.timestamp).toISOString(), p_units: units,
     });
-    if (error) return reply(400, { error: error.message });
+    if (error) return reply(400, { error: error.message.replace(/alpha limits/gi, 'supported limits') });
     banked += Number(data || 0);
   }
   return reply(200, { banked });

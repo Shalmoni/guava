@@ -356,7 +356,7 @@ export default function App() {
   const selected = routeOptions[selectedRoute];
   const currentStep = selected?.steps[stepIndex];
   if (driving && currentStep && position && distanceMeters(position, currentStep.maneuver) < 35 && stepIndex < selected.steps.length - 1) {
-    // Advancing a cue is best-effort in the web preview, not robust map matching.
+    // Advancing a cue is best-effort in the browser, not robust map matching.
     const following = stepIndex + 1;
     if (stepRef.current !== following) {
       stepRef.current = following;
@@ -525,7 +525,7 @@ export default function App() {
         <button className="pink-button" disabled={authBusy} onClick={() => void googleSignIn()}>{authBusy ? 'Connecting…' : 'Continue with Google'}</button> :
         <p className="signin-wait">Sign-in is being set up. Please try again later.</p>}
       {error && <p className="signin-error" role="alert">{error}</p>}
-      <p className="signin-privacy"><a href={privacyUrl} target="_blank" rel="noreferrer">Privacy & alpha safety</a></p>
+      <p className="signin-privacy"><a href={privacyUrl} target="_blank" rel="noreferrer">Privacy & driving safety</a></p>
     </div>
   </main>;
 
@@ -556,7 +556,7 @@ export default function App() {
     </div>}
 
     <div className="top-row">
-      {!driving && <div className="brand-pill"><img className="brand-logo" src={`${import.meta.env.BASE_URL}guava-logo.png`} alt="" />Guava <span className="brand-tag">FRIEND ALPHA</span></div>}
+      {!driving && <div className="brand-pill"><img className="brand-logo" src={`${import.meta.env.BASE_URL}guava-logo.png`} alt="" />Guava</div>}
       {!driving && <button className="round-control profile-control" onClick={() => setPanel('profile')} aria-label="Profile"><UserRound size={23} /></button>}
     </div>
 
@@ -608,7 +608,7 @@ export default function App() {
       {selected && <>
         <div className="destination-title"><Flag size={19} /><div><strong>{destination?.name}</strong><small>{fmtTime(selected.duration)} · {fmtDistance(selected.distance)}</small></div></div>
         {routeOptions.length > 1 && <div className="route-options">{routeOptions.map((route, index) => <button key={index} className={selectedRoute === index ? 'selected' : ''} onClick={() => setSelectedRoute(index)}>{index === 0 ? 'Fastest' : `Option ${index + 1}`}<small>{fmtTime(route.duration)}</small></button>)}</div>}
-        <div className="planner-footer"><small>Preview routing · no live traffic</small><button className="pink-button" onClick={startDrive}><Play size={17} fill="currentColor" />Start</button></div>
+        <div className="planner-footer"><small>Routes do not use live traffic</small><button className="pink-button" onClick={startDrive}><Play size={17} fill="currentColor" />Start</button></div>
       </>}
     </div>}
 
@@ -653,7 +653,7 @@ export default function App() {
 
     {panel === 'maps' && <div className="sheet-backdrop" onClick={() => setPanel('none')}><section className="bottom-sheet map-sheet" onClick={event => event.stopPropagation()}>
       <div className="sheet-header"><h2>Change your world</h2><button onClick={() => setPanel('none')} aria-label="Close"><X size={22} /></button></div>
-      <p>Switch views anytime. Everything in this preview is free.</p>
+      <p>Switch views anytime. All map views are free.</p>
       <div className="view-list">{mapViews.map(option => <button key={option} disabled={option === 'Satellite' && !hasSatellite} className={view === option ? 'active' : ''} onClick={() => { setView(option); setPanel('none'); }}>
         <span className="view-icon">{option === 'Altitude' ? <Mountain /> : option === 'Road Pulse' ? <Route /> : option === 'Satellite' ? <Globe2 /> : option === 'Territory' ? <Flag /> : <MapIcon />}</span>
         <span><strong>{option}</strong><small>{option === 'Satellite' && !hasSatellite ? 'Imagery provider not connected yet' : !demoMode && !communityOptIn && (option === 'Road Pulse' || option === 'Territory') ? 'Join community play to see shared roads' : option === 'Road Pulse' ? 'How often roads are used' : option === 'Territory' ? 'Daily captured road sections' : option === 'Altitude' ? 'Elevation colors and current altitude' : option === 'Regular' ? 'Everyday road map' : 'Imagery from above'}</small></span>
@@ -686,8 +686,8 @@ export default function App() {
         <button className="pink-button sheet-action" disabled={!cloudProfile || profileBusy} onClick={() => void saveCloudProfile()}>{profileBusy ? 'Saving…' : 'Save profile'}</button>
         <button className="subtle-action sheet-action" onClick={() => void checkCommunityConnection()}>Check community connection</button>
         {connectionResult && <p className="empty-note" role="status">{connectionResult}</p>}
-        <button className="subtle-action sheet-action" disabled={authBusy} onClick={() => void signOut()}>Sign out</button></> : isSupabaseConfigured ? <button className="pink-button sheet-action" disabled={authBusy} onClick={() => void googleSignIn()}>{authBusy ? 'Connecting…' : 'Continue with Google'}</button> : <p className="empty-note">Google sign-in awaits Guava’s separate Supabase project. You can still test the map and local progress.</p>}
-      <h3>Navigation & privacy</h3><p className="privacy-note">Guava requests location while its web page is open. It records a trip only after you tap Start, and you choose Save or Discard when ending it. Full GPS tracks are stored only in this browser; opted-in territory segments are matched while driving, with summary scores shared after Save. Browser recording may pause when locked or backgrounded. <a href={privacyUrl} target="_blank" rel="noreferrer">Read the alpha privacy notice</a>.</p>
+        <button className="subtle-action sheet-action" disabled={authBusy} onClick={() => void signOut()}>Sign out</button></> : isSupabaseConfigured ? <button className="pink-button sheet-action" disabled={authBusy} onClick={() => void googleSignIn()}>{authBusy ? 'Connecting…' : 'Continue with Google'}</button> : <p className="empty-note">Google sign-in is unavailable here. You can still use the map and keep local progress.</p>}
+      <h3>Navigation & privacy</h3><p className="privacy-note">Guava requests location while its web page is open. It records a trip only after you tap Start, and you choose Save or Discard when ending it. Full GPS tracks are stored only in this browser; opted-in territory segments are matched while driving, with summary scores shared after Save. Browser recording may pause when locked or backgrounded. <a href={privacyUrl} target="_blank" rel="noreferrer">Read the privacy notice</a>.</p>
       <button className="subtle-action sheet-action" onClick={() => { const blob = new Blob([JSON.stringify(trips, null, 2)], { type: 'application/json' }); const url = URL.createObjectURL(blob); const link = document.createElement('a'); link.href = url; link.download = 'guava-drives.json'; link.click(); window.setTimeout(() => URL.revokeObjectURL(url), 1000); }}>Export my local drives</button>
     </div></div>}
 
@@ -701,9 +701,9 @@ export default function App() {
         {liveRankings.length ? <div className="ranking-list">{liveRankings.map((entry, index) => <div key={entry.id}><b>{index + 1}</b><span className="ranking-dot" style={{ background: entry.color }} /><strong>{entry.name}</strong><span>{liveRankValue(entry.value)}</span>{leaderboardMetric === 'Territory' && <button className="rank-map-button" onClick={() => viewLiveMap('Territory', entry.id)}>Map</button>}</div>)}</div> : <p className="empty-note">{communityOptIn ? 'No shared drives yet. The first opted-in drive starts the board.' : 'Join community play to see other players and appear on the board.'}</p>}
         <button className="subtle-action sheet-action" onClick={() => viewLiveMap('Territory')}>View live territory</button>
         <button className="subtle-action sheet-action" onClick={() => viewLiveMap('Road Pulse')}>View shared road use</button>
-        <button className="text-action sheet-action" disabled={demoLoading} onClick={() => void openGameLab()}>{demoLoading ? 'Loading simulation…' : 'Preview a week with 10 demo drivers'}</button>
+        <button className="text-action sheet-action" disabled={demoLoading} onClick={() => void openGameLab()}>{demoLoading ? 'Loading simulation…' : 'Simulate a week with 10 drivers'}</button>
       </> : <>
-        <div className="lab-warning"><strong>TEST SIMULATION · NOT LIVE SCORES</strong><span>{demoScenario === 'week' ? 'Ten invented drivers. Seven daily settlements on real roads near Harish.' : 'Three invented drivers in one daily round.'} Nothing here is published to the community.</span></div>
+        <div className="lab-warning"><strong>SIMULATED SCORES · NOT LIVE</strong><span>{demoScenario === 'week' ? 'Ten invented drivers. Seven daily settlements on real roads near Harish.' : 'Three invented drivers in one daily round.'} Nothing here is published to the community.</span></div>
         <div className="lab-scenarios"><button className={demoScenario === 'week' ? 'active' : ''} onClick={() => void openWeekScenario()}>Week · 10 players</button><button className={demoScenario === 'day' ? 'active' : ''} onClick={() => void openDayScenario()}>24h rules</button></div>
         {demoScenario === 'week' && weekSnapshot ? <div className="round-clock"><span>SEVEN FIXED 24-HOUR UTC ROUNDS</span><strong>Day {weekDay} of 7 · settled at 00:05</strong><small>{weekSnapshot.driveCount} simulated drives so far. Unvisited road units retain prior owners; tied units remain unclaimed and uncolored.</small><input type="range" min="1" max="7" value={weekDay} onChange={event => { setWeekDay(Number(event.target.value)); setSelectedTerritory(null); }} aria-label="Leaderboard simulation day" /></div>
           : <div className="round-clock"><span>SIMULATED 24-HOUR UTC ROUND</span><strong>{demoSettled ? 'Day 2 · 00:05 · settled' : 'Day 1 · 00:00–24:00'}</strong><small>{demoSettled ? 'Winner owns each road unit; tied units are unclaimed.' : 'These are provisional leaders. More drives may change each road before the 00:05 settlement.'}</small></div>}

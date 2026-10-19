@@ -110,7 +110,7 @@ Deno.serve(async (request: Request) => {
   const endedAt = body.endedAt!;
   const duration = (endedAt - startedAt) / 1000;
   if (duration < 15 || duration > 8 * 3600 || endedAt > Date.now() + 120000 || endedAt < Date.now() - 3600000
-      || Math.abs(points[0].timestamp - startedAt) > 120000) return reply(400, { error: 'Drive time is outside alpha limits' });
+      || Math.abs(points[0].timestamp - startedAt) > 120000) return reply(400, { error: 'Drive time is outside supported limits' });
   let rawDistance = 0;
   let height = 0;
   let altitudeAnchor: number | null = null;
@@ -131,9 +131,9 @@ Deno.serve(async (request: Request) => {
       } else if (altitudeAnchor === null) altitudeAnchor = fix.altitude;
     }
   }
-  if (rawDistance < 50 || rawDistance > 200000 || rawDistance / duration > 58) return reply(400, { error: 'Drive distance is outside alpha limits' });
+  if (rawDistance < 50 || rawDistance > 200000 || rawDistance / duration > 58) return reply(400, { error: 'Drive distance is outside supported limits' });
 
-  // Public OSRM is suitable for a small friend alpha, not production traffic
+  // Public OSRM has no production traffic or always-on matching guarantee.
   // or a reliable always-on map-matching contract. Never send user identifiers.
   const matched: Array<{ distance: number; geometry: { coordinates: Point[] } }> = [];
   const timedUnits = new Map<string, TimedUnit>();
@@ -178,6 +178,6 @@ Deno.serve(async (request: Request) => {
     p_started_at: new Date(startedAt).toISOString(), p_ended_at: new Date(endedAt).toISOString(),
     p_distance_m: Math.round(distance), p_height_m: Math.min(10000, Math.round(height)), p_units: units,
   });
-  if (error) return reply(400, { error: error.message });
+  if (error) return reply(400, { error: error.message.replace(/alpha limits/gi, 'supported limits') });
   return reply(200, { ...data, distance_m: Math.round(distance), height_m: Math.round(height) });
 });

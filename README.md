@@ -1,8 +1,8 @@
-# Guava friend alpha
+# Guava
 
 Guava is a mobile-first driving map and road-territory game. The shareable app is the web build in `web/`, deployed through GitHub Pages at [shalmoni.github.io/guava](https://shalmoni.github.io/guava/). The older iOS prototype in `Mappy/` is a design reference, not the app that link opens.
 
-The alpha requires Google sign-in. Community play is opt-in and off by default. A player can explore the map and save private drives without joining the shared game. After explicit consent to the live-territory notice, road-unit visits sync during opted-in drives; shared XP, distance, and height update only after a finished drive is saved. Older private drives are not silently uploaded.
+The app requires Google sign-in. Community play is opt-in and off by default. A player can explore the map and save private drives without joining the shared game. After explicit consent to the live-territory notice, road-unit visits sync during opted-in drives; shared XP, distance, and height update only after a finished drive is saved. Older private drives are not silently uploaded.
 
 ## Rules
 
@@ -13,11 +13,11 @@ The alpha requires Google sign-in. Community play is opt-in and off by default. 
 - The live leaderboard uses hosted scores. The clearly labeled Game Lab remains a separate ten-player simulation for reviewing how a populated map might look.
 - Turning community play off deletes that player's shared drive summaries, scores, live visits and ownership; local browser drives remain.
 
-## Limits — important for testers
+## Current limits
 
 This is **not safety-grade navigation** and does not have live traffic, dependable closures, speed limits, background GPS, voice instructions, or robust rerouting. Phone browsers can pause location updates when locked or backgrounded. Public Photon and OSRM services can be unavailable or throttled. Use a trusted navigation app for important directions and never operate game controls while driving.
 
-Regular and Altitude views work. Satellite remains disabled until an imagery provider is configured. The friend alpha is Israel-only. Territory cells are approximately 25 m hexes on map-matched roads; nearby parallel roads can still collide in one cell. Scores and matching are experimental, not fraud-proof. See the [alpha privacy notice](https://shalmoni.github.io/guava/privacy.html).
+Regular and Altitude views work. Satellite remains disabled until an imagery provider is configured. Guava currently supports Israel. Territory cells are approximately 25 m hexes on map-matched roads; nearby parallel roads can still collide in one cell. Scores and matching are not fraud-proof. See the [privacy notice](https://shalmoni.github.io/guava/privacy.html).
 
 During planned drives, the displayed arrow snaps to the selected route only when the GPS fix is nearby; recorded GPS is never silently altered. Manual zoom or pan pauses camera following, and the recenter control restores the close driving view. Elevation gain/loss needs usable device altitude samples; an unavailable measurement is shown as a dash instead of a false zero.
 
