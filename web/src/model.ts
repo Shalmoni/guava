@@ -1,5 +1,5 @@
 export type Point = [number, number]; // longitude, latitude
-export type MapView = 'Regular' | 'Satellite' | 'Territory' | 'Road Pulse' | 'Altitude';
+export type MapView = 'Regular' | 'Dark' | 'Territory' | 'Road Pulse' | 'Altitude';
 export type RoadScope = 'Everybody' | 'Mine';
 
 export interface DrivePoint {

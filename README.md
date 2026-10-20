@@ -11,14 +11,14 @@ The app requires Google sign-in. Community play is opt-in and off by default. A 
 - Each session contributes at most one vote per road cell per Israel-calendar day, regardless of loops or travel direction. The daily contest closes at local midnight; ownership becomes final at about 09:05 Israel time the following morning to admit late uploads. The unique top driver wins; ties clear ownership; untouched cells keep their owner.
 - Territory paints only captured road sections. A tap identifies the owner and approximate section length. Road Pulse shows community roads only after three distinct opted-in drivers have used them. Names are displayed only for participants.
 - The leaderboard and territory map show real opted-in community data.
-- Satellite uses MapTiler imagery. Add a browser-restricted MapTiler key as the GitHub Actions repository variable `VITE_MAPTILER_KEY` (and `web/.env.local` for local testing); until then the chooser correctly disables Satellite. MapTiler attribution must remain visible on the map.
+- The map picker has five separate views: Regular, Dark, Territory, Road Pulse, and Altitude. Satellite is not in the current picker; licensed imagery remains a future feature.
 - Turning community play off deletes that player's shared drive summaries, scores, live visits and ownership; local browser drives remain.
 
 ## Current limits
 
 This is **not safety-grade navigation** and does not have live traffic, dependable closures, speed limits, background GPS, voice instructions, or robust rerouting. Phone browsers can pause location updates when locked or backgrounded. Public Photon and OSRM services can be unavailable or throttled. Use a trusted navigation app for important directions and never operate game controls while driving.
 
-Regular and Altitude views work. Satellite remains disabled until an imagery provider is configured. Guava currently supports Israel. Territory cells are approximately 25 m hexes on map-matched roads; nearby parallel roads can still collide in one cell. Scores and matching are not fraud-proof. See the [privacy notice](https://shalmoni.github.io/guava/privacy.html).
+Regular, Dark, and Altitude views work. Guava currently supports Israel. Territory cells are approximately 25 m hexes on map-matched roads; nearby parallel roads can still collide in one cell. Scores and matching are not fraud-proof. See the [privacy notice](https://shalmoni.github.io/guava/privacy.html).
 
 During planned drives, the displayed arrow snaps to the selected route only when the GPS fix is nearby; recorded GPS is never silently altered. Manual zoom or pan pauses camera following, and the recenter control restores the close driving view. Elevation gain/loss needs usable device altitude samples; an unavailable measurement is shown as a dash instead of a false zero.
 

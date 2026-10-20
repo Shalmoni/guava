@@ -11,7 +11,6 @@ export type TerritorySelection = { unitId: string; ownerId: string | null; stret
 
 type Props = {
   view: MapView;
-  regularMode: 'Light' | 'Dark';
   roadScope: RoadScope;
   trips: Trip[];
   livePoints: DrivePoint[];
@@ -32,9 +31,6 @@ type Props = {
 const NORMAL_STYLE = 'https://tiles.openfreemap.org/styles/bright';
 const QUIET_STYLE = 'https://tiles.openfreemap.org/styles/positron';
 const TERRAIN_TILES = 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png';
-const SATELLITE_STYLE = import.meta.env.VITE_MAPTILER_KEY
-  ? `https://api.maptiler.com/maps/hybrid-v4/style.json?key=${import.meta.env.VITE_MAPTILER_KEY}`
-  : null;
 maplibregl.setWorkerUrl(workerUrl);
 
 function lineData(lines: Point[][], properties?: (index: number) => Record<string, string>) {
@@ -158,7 +154,7 @@ export default function GuavaMap(props: Props) {
   const markerRef = useRef<maplibregl.Marker | null>(null);
   const followRef = useRef(true);
   const lastCameraAtRef = useRef(0);
-  const styleRef = useRef<'normal' | 'dark' | 'quiet' | 'satellite'>('normal');
+  const styleRef = useRef<'normal' | 'dark' | 'quiet'>('normal');
   const latest = useRef(props);
   latest.current = props;
 
@@ -199,18 +195,17 @@ export default function GuavaMap(props: Props) {
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
-    const targetStyle = props.view === 'Satellite' && SATELLITE_STYLE ? 'satellite'
-      : props.view === 'Territory' || props.view === 'Road Pulse' ? 'quiet' : props.view === 'Regular' && props.regularMode === 'Dark' ? 'dark' : 'normal';
+    const targetStyle = props.view === 'Territory' || props.view === 'Road Pulse' ? 'quiet' : props.view === 'Dark' ? 'dark' : 'normal';
     if (styleRef.current !== targetStyle) {
       styleRef.current = targetStyle;
       if (targetStyle === 'dark') {
         void loadDarkStyle().then(style => { if (styleRef.current === 'dark') map.setStyle(style); })
           .catch(() => { if (styleRef.current === 'dark') { styleRef.current = 'normal'; map.setStyle(NORMAL_STYLE); } });
-      } else map.setStyle(targetStyle === 'satellite' ? SATELLITE_STYLE! : targetStyle === 'quiet' ? QUIET_STYLE : NORMAL_STYLE);
+      } else map.setStyle(targetStyle === 'quiet' ? QUIET_STYLE : NORMAL_STYLE);
       return;
     }
     syncMap(map, props);
-  }, [props.view, props.regularMode, props.roadScope, props.trips, props.livePoints, props.routes, props.selectedRoute, props.isDriving, props.liveTerritory, props.livePulse, props.selectedTerritoryOwner]);
+  }, [props.view, props.roadScope, props.trips, props.livePoints, props.routes, props.selectedRoute, props.isDriving, props.liveTerritory, props.livePulse, props.selectedTerritoryOwner]);
 
   useEffect(() => {
     const map = mapRef.current;

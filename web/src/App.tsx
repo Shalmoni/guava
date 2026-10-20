@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import {
-  ArrowLeft, ArrowRight, ChevronDown, Compass, Flag, Globe2, Layers3,
+  ArrowLeft, ArrowRight, ChevronDown, Compass, Flag, Layers3, Moon,
   LocateFixed, Map as MapIcon, Mountain, Navigation, Play, Search,
   Settings, Square, Trophy, UserRound, UsersRound, X, Minus, Plus, Route, Timer,
 } from 'lucide-react';
@@ -18,8 +18,7 @@ import type { User } from '@supabase/supabase-js';
 type Panel = 'none' | 'drive' | 'tools' | 'maps' | 'search' | 'profile' | 'settings' | 'leaderboard' | 'recap';
 type Place = { name: string; detail: string; position: Point };
 type LiveDrive = { id: string; startedAt: number; points: DrivePoint[]; distance: number; height: number; altitudeAnchor: number | null; share: boolean };
-const mapViews: MapView[] = ['Regular', 'Satellite', 'Territory', 'Road Pulse', 'Altitude'];
-const hasSatellite = Boolean(import.meta.env.VITE_MAPTILER_KEY);
+const mapViews: MapView[] = ['Regular', 'Dark', 'Territory', 'Road Pulse', 'Altitude'];
 const requiresAccount = import.meta.env.VITE_REQUIRE_AUTH === 'true';
 const privacyUrl = new URL(`${import.meta.env.BASE_URL}privacy.html`, window.location.origin).toString();
 
@@ -39,7 +38,6 @@ function liveTime(seconds: number) {
 export default function App() {
   const [view, setView] = useState<MapView>('Regular');
   const [roadScope, setRoadScope] = useState<RoadScope>('Everybody');
-  const [regularMode, setRegularMode] = useState<'Light' | 'Dark'>('Light');
   const [panel, setPanel] = useState<Panel>('none');
   const [position, setPosition] = useState<Point | null>(null);
   const [heading, setHeading] = useState<number | null>(null);
@@ -444,7 +442,7 @@ export default function App() {
   </main>;
 
   return <div className="app-shell">
-    <GuavaMap view={view} regularMode={regularMode} roadScope={roadScope} trips={trips} livePoints={live?.points || []}
+    <GuavaMap view={view} roadScope={roadScope} trips={trips} livePoints={live?.points || []}
       routes={routeOptions} selectedRoute={selectedRoute} position={position} heading={heading}
       isDriving={driving} northUp={northUp} zoomCommand={zoomCommand} centerCommand={centerCommand}
       liveTerritory={liveTerritory} livePulse={livePulse}
@@ -555,11 +553,11 @@ export default function App() {
     {panel === 'maps' && <div className="sheet-backdrop" onClick={() => setPanel('none')}><section className="bottom-sheet map-sheet" onClick={event => event.stopPropagation()}>
       <div className="sheet-header"><h2>Change your world</h2><button onClick={() => setPanel('none')} aria-label="Close"><X size={22} /></button></div>
       <p>Switch views anytime. All map views are free.</p>
-      <div className="view-list">{mapViews.map(option => <div key={option} className="view-group"><button disabled={option === 'Satellite' && !hasSatellite} className={view === option ? 'active' : ''} onClick={() => { setView(option); setSelectedTerritory(null); setPanel('none'); }}>
-        <span className="view-icon">{option === 'Altitude' ? <Mountain /> : option === 'Road Pulse' ? <Route /> : option === 'Satellite' ? <Globe2 /> : option === 'Territory' ? <Flag /> : <MapIcon />}</span>
-        <span><strong>{option}</strong><small>{option === 'Satellite' && !hasSatellite ? 'Imagery provider key needed' : !communityOptIn && (option === 'Road Pulse' || option === 'Territory') ? 'Join community play to see shared roads' : option === 'Road Pulse' ? 'How often roads are used' : option === 'Territory' ? 'Captured road sections' : option === 'Altitude' ? 'Elevation colors and current altitude' : option === 'Regular' ? `${regularMode} everyday road map` : 'Imagery from above'}</small></span>
+      <div className="view-list">{mapViews.map(option => <div key={option} className="view-group"><button className={view === option ? 'active' : ''} onClick={() => { setView(option); setSelectedTerritory(null); setPanel('none'); }}>
+        <span className="view-icon">{option === 'Altitude' ? <Mountain /> : option === 'Road Pulse' ? <Route /> : option === 'Dark' ? <Moon /> : option === 'Territory' ? <Flag /> : <MapIcon />}</span>
+        <span><strong>{option}</strong><small>{!communityOptIn && (option === 'Road Pulse' || option === 'Territory') ? 'Join community play to see shared roads' : option === 'Road Pulse' ? 'How often roads are used' : option === 'Territory' ? 'Captured road sections' : option === 'Altitude' ? 'Elevation colors and current altitude' : option === 'Dark' ? 'Dark everyday road map' : 'Everyday road map'}</small></span>
         {view === option && <span className="selected-mark">✓</span>}
-      </button>{option === 'Regular' && <div className="regular-modes" aria-label="Regular map appearance">{(['Light', 'Dark'] as const).map(mode => <button key={mode} className={regularMode === mode ? 'active' : ''} onClick={() => { setRegularMode(mode); setView('Regular'); setPanel('none'); }}>{mode}</button>)}</div>}</div>)}</div>
+      </button></div>)}</div>
     </section></div>}
 
     {panel === 'drive' && driving && <div className="sheet-backdrop" onClick={() => setPanel('none')}><section className="bottom-sheet" onClick={event => event.stopPropagation()}>
