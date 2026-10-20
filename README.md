@@ -20,7 +20,7 @@ This is **not safety-grade navigation** and does not have live traffic, dependab
 
 Regular, Dark, and Altitude views work. Guava currently supports Israel. Territory cells are approximately 25 m hexes on map-matched roads; nearby parallel roads can still collide in one cell. Scores and matching are not fraud-proof. See the [privacy notice](https://shalmoni.github.io/guava/privacy.html).
 
-During planned drives, the displayed arrow snaps to the selected route only when the GPS fix is nearby; recorded GPS is never silently altered. Manual zoom or pan pauses camera following, and the recenter control restores the close driving view. Elevation gain/loss needs usable device altitude samples; an unavailable measurement is shown as a dash instead of a false zero.
+During planned drives, the displayed arrow snaps to the selected route only when the GPS fix is nearby; recorded GPS is never silently altered. Manual zoom or pan pauses camera following, and the recenter control restores the close driving view. The Altitude badge uses trustworthy GPS altitude or a current terrain-elevation estimate; it shows `-- m` when neither is available. Elevation gain/loss needs usable device altitude samples and does not treat terrain estimates as measured climb.
 
 ## Local development
 

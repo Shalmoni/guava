@@ -13,6 +13,7 @@ import type { DrivePoint, DrivingRoute, MapView, Point, RoadScope, Trip } from '
 import { isSupabaseConfigured, signInWithGoogle, supabase } from './supabase';
 import { bankTerritorySegment, cloudPulseLayers, cloudRankings, cloudTerritoryLayers, loadCloudGame, uploadCommunityDrive, type CloudGame, type CloudProfile } from './cloud';
 import { connectedTerritory, israelRoundRemaining, territoryAge } from './territory';
+import { shownAltitude, trustedGpsAltitude, type TerrainSample } from './altitude';
 import type { User } from '@supabase/supabase-js';
 
 type Panel = 'none' | 'drive' | 'tools' | 'maps' | 'search' | 'profile' | 'settings' | 'leaderboard' | 'recap';
@@ -41,8 +42,8 @@ export default function App() {
   const [panel, setPanel] = useState<Panel>('none');
   const [position, setPosition] = useState<Point | null>(null);
   const [heading, setHeading] = useState<number | null>(null);
-  const [altitude, setAltitude] = useState<number | null>(null);
-  const [gpsAltitudeAvailable, setGpsAltitudeAvailable] = useState(false);
+  const [gpsAltitude, setGpsAltitude] = useState<number | null>(null);
+  const [terrainSample, setTerrainSample] = useState<TerrainSample | null>(null);
   const [locationError, setLocationError] = useState('');
   const [trips, setTrips] = useState<Trip[]>(loadTrips);
   const [routeOptions, setRouteOptions] = useState<DrivingRoute[]>([]);
@@ -82,6 +83,9 @@ export default function App() {
   const lastPositionRef = useRef<Point | null>(null);
   const uploadingRef = useRef(new Set<string>());
   const territoryCheckpointRef = useRef({ sessionId: '', nextIndex: 0, busy: false });
+  const elevationGrid = position ? `${(Math.round(position[0] * 2000) / 2000).toFixed(4)},${(Math.round(position[1] * 2000) / 2000).toFixed(4)}` : '';
+  const gpsAltitudeAvailable = gpsAltitude != null;
+  const altitude = shownAltitude(gpsAltitude, terrainSample, elevationGrid);
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
@@ -208,11 +212,8 @@ export default function App() {
       setPosition(next);
       lastPositionRef.current = next;
       if (fix.coords.heading != null && Number.isFinite(fix.coords.heading)) setHeading(fix.coords.heading);
-      const deviceAltitude = fix.coords.altitude != null && Number.isFinite(fix.coords.altitude)
-        && (fix.coords.altitudeAccuracy == null || fix.coords.altitudeAccuracy <= 50)
-        ? fix.coords.altitude : null;
-      setGpsAltitudeAvailable(deviceAltitude != null);
-      if (deviceAltitude != null) setAltitude(deviceAltitude);
+      const deviceAltitude = trustedGpsAltitude(fix.coords.altitude, fix.coords.altitudeAccuracy);
+      setGpsAltitude(deviceAltitude);
       setLocationError('');
       const current = driveRef.current;
       if (!current || fix.coords.accuracy > 50) return;
@@ -237,15 +238,14 @@ export default function App() {
     return () => navigator.geolocation.clearWatch(watcher);
   }, [authUser?.id, cloudProfile?.user_id, cloudProfile?.community_opt_in, showWelcome]);
 
-  const elevationGrid = position ? `${(Math.round(position[0] * 2000) / 2000).toFixed(4)},${(Math.round(position[1] * 2000) / 2000).toFixed(4)}` : '';
   useEffect(() => {
     if (gpsAltitudeAvailable || !elevationGrid) return;
     let cancelled = false;
     const controller = new AbortController();
     const [longitude, latitude] = elevationGrid.split(',');
     fetch(`https://api.open-meteo.com/v1/elevation?latitude=${latitude}&longitude=${longitude}`, { signal: controller.signal })
-      .then(result => result.json())
-      .then(data => { if (!cancelled && typeof data.elevation?.[0] === 'number') setAltitude(data.elevation[0]); })
+      .then(result => { if (!result.ok) throw new Error('Elevation unavailable'); return result.json(); })
+      .then(data => { if (!cancelled && Number.isFinite(data.elevation?.[0])) setTerrainSample({ grid: elevationGrid, meters: data.elevation[0] }); })
       .catch(() => {});
     return () => { cancelled = true; controller.abort(); };
   }, [elevationGrid, gpsAltitudeAvailable]);
@@ -466,7 +466,7 @@ export default function App() {
       <div><small>UP NEXT</small><strong>{currentStep?.instruction || 'Continue on route'}</strong></div>
     </div>}
 
-    {view === 'Altitude' && <div className="altitude-pill"><Mountain size={15} /> {altitude == null ? '— m' : `${Math.round(altitude)} m`} <small>altitude</small></div>}
+    {view === 'Altitude' && <div className="altitude-pill"><Mountain size={15} /> {altitude == null ? '-- m' : `${Math.round(altitude)} m`} <small>altitude</small></div>}
 
     <div className="map-controls">
       <div className="zoom-stack">
