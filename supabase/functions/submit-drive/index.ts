@@ -96,8 +96,9 @@ Deno.serve(async (request: Request) => {
   if ((await request.clone().json().catch(() => null))?.health === true) return reply(200, { ok: true });
   const admin = createClient(url, service, { auth: { persistSession: false } });
   const { data: profile, error: profileError } = await admin.from('guava_profiles')
-    .select('community_opt_in').eq('user_id', identity.user.id).single();
+    .select('community_opt_in,territory_detail_consent_at').eq('user_id', identity.user.id).single();
   if (profileError || !profile?.community_opt_in) return reply(403, { error: 'Turn on community play in Settings before sharing a drive' });
+  if (!profile.territory_detail_consent_at) return reply(403, { error: 'Review the updated territory sharing notice in Guava first' });
 
   let body: { id?: string; startedAt?: number; endedAt?: number; points?: Fix[] };
   try { body = await request.json(); } catch { return reply(400, { error: 'Invalid drive data' }); }

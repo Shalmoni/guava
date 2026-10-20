@@ -5,13 +5,13 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 import type { DrivingRoute, DrivePoint, MapView, Point, RoadScope, Trip } from './model';
 import { ISRAEL_CENTER } from './model';
 import { snapToRoute, traversedRoute } from './navigation';
-import { WEEK_DRIVER_IDS } from './game';
 
 type TerritoryLayer = { color: string; lines: Point[][]; unitIds: string[]; stretchMeters: number[]; width: number };
-export type TerritorySelection = { unitId: string; ownerId: string; stretchMeters: number };
+export type TerritorySelection = { unitId: string; ownerId: string | null; stretchMeters: number };
 
 type Props = {
   view: MapView;
+  regularMode: 'Light' | 'Dark';
   roadScope: RoadScope;
   trips: Trip[];
   livePoints: DrivePoint[];
@@ -23,22 +23,17 @@ type Props = {
   northUp: boolean;
   zoomCommand: number;
   centerCommand: number;
-  demoTerritory: Record<string, TerritoryLayer> | null;
   liveTerritory: Record<string, TerritoryLayer> | null;
   selectedTerritoryOwner: string | null;
   onTerritorySelect: (selection: TerritorySelection | null) => void;
-  demoPulse: Array<{ color: string; lines: Point[][]; width: number }> | null;
   livePulse: Array<{ color: string; lines: Point[][]; width: number }> | null;
-  demoLocation: Point | null;
-  demoFocusCommand: number;
-  liveFocusCommand: number;
 };
 
 const NORMAL_STYLE = 'https://tiles.openfreemap.org/styles/bright';
 const QUIET_STYLE = 'https://tiles.openfreemap.org/styles/positron';
 const TERRAIN_TILES = 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png';
 const SATELLITE_STYLE = import.meta.env.VITE_MAPTILER_KEY
-  ? `https://api.maptiler.com/maps/hybrid/style.json?key=${import.meta.env.VITE_MAPTILER_KEY}`
+  ? `https://api.maptiler.com/maps/hybrid-v4/style.json?key=${import.meta.env.VITE_MAPTILER_KEY}`
   : null;
 maplibregl.setWorkerUrl(workerUrl);
 
@@ -66,6 +61,34 @@ function ensureLine(map: maplibregl.Map, id: string, lines: Point[][], color: st
     map.setPaintProperty(id, 'line-width', width);
     map.setPaintProperty(id, 'line-opacity', opacity);
   }
+}
+
+async function loadDarkStyle(): Promise<maplibregl.StyleSpecification> {
+  const response = await fetch(NORMAL_STYLE);
+  if (!response.ok) throw new Error('Dark map is unavailable');
+  const style = await response.json() as maplibregl.StyleSpecification;
+  for (const layer of style.layers) {
+    const id = layer.id.toLowerCase();
+    const paint = (layer.paint ||= {}) as Record<string, unknown>;
+    if (layer.type === 'background') paint['background-color'] = '#10191f';
+    else if (layer.type === 'fill') {
+      const color = id.includes('water') ? '#18384b'
+        : /park|wood|grass|forest/.test(id) ? '#1b352d'
+          : id.includes('sand') ? '#332c27' : id.includes('building') ? '#29333a' : '#1b252c';
+      paint['fill-color'] = color;
+    } else if (layer.type === 'line') {
+      const color = id.includes('water') ? '#37677d' : id.includes('casing') ? '#11191e'
+        : /motorway|trunk|primary/.test(id) ? '#b89a92'
+          : /secondary|tertiary/.test(id) ? '#8996a0'
+            : /highway|bridge|tunnel|road/.test(id) ? '#64747e' : '#465762';
+      paint['line-color'] = color;
+    } else if (layer.type === 'symbol') {
+      paint['text-color'] = id.includes('water') ? '#88b6cb' : '#dbe3e5';
+      paint['text-halo-color'] = '#10191f';
+      paint['text-halo-width'] = 1.2;
+    }
+  }
+  return style;
 }
 
 function syncMap(map: maplibregl.Map, props: Props) {
@@ -104,17 +127,13 @@ function syncMap(map: maplibregl.Map, props: Props) {
   const live = props.livePoints.map(point => point.position);
   // Saved GPS is private. Territory paints only settled, public ownership.
   ensureLine(map, 'guava-territory', [], '#f18ca0', 9, 0.72);
-  for (const id of WEEK_DRIVER_IDS) {
-    const layer = props.demoTerritory?.[id];
-    const selected = props.selectedTerritoryOwner;
-    ensureLine(map, `guava-demo-${id}`, props.view === 'Territory' ? layer?.lines || [] : [], layer?.color || '#8b9699', selected === id ? 12 : layer?.width || 8, selected && selected !== id ? .3 : .92,
-      index => ({ unitId: layer?.unitIds[index] || '', ownerId: id, stretchMeters: String(layer?.stretchMeters[index] || 0) }));
-  }
   const liveIds = new Set(Object.keys(props.liveTerritory || {}).map(id => `guava-owned-${id}`));
   for (const layer of map.getStyle().layers.filter(item => item.id.startsWith('guava-owned-'))) {
     if (!liveIds.has(layer.id)) ensureLine(map, layer.id, [], '#8b9699', 9, 0);
   }
-  for (const [id, layer] of Object.entries(props.liveTerritory || {})) {
+  const contestedLayer = props.liveTerritory?.contested;
+  ensureLine(map, 'guava-contested-outline', props.view === 'Territory' ? contestedLayer?.lines || [] : [], '#172026', 14, .95);
+  for (const [id, layer] of Object.entries(props.liveTerritory || {}).sort(([a], [b]) => a === 'contested' ? -1 : b === 'contested' ? 1 : a === props.selectedTerritoryOwner ? 1 : b === props.selectedTerritoryOwner ? -1 : 0)) {
     const selected = props.selectedTerritoryOwner;
     ensureLine(map, `guava-owned-${id}`, props.view === 'Territory' ? layer.lines : [], layer.color,
       selected === id ? 12 : layer.width, selected && selected !== id ? .3 : .92,
@@ -123,8 +142,8 @@ function syncMap(map: maplibregl.Map, props: Props) {
   ensureLine(map, 'guava-live', props.view === 'Territory' && !props.routes.length ? [live] : [], '#f4a7bb', 7, 0.86);
   ensureLine(map, 'guava-road-pulse', props.view === 'Road Pulse' && props.roadScope === 'Mine' ? saved : [], '#d35377', 9, 0.22);
   for (let index = 0; index < 4; index++) {
-    const layer = props.demoPulse?.[index] || props.livePulse?.[index];
-    ensureLine(map, `guava-demo-pulse-${index}`, props.view === 'Road Pulse' && props.roadScope === 'Everybody' ? layer?.lines || [] : [], layer?.color || '#edc7c8', layer?.width || 6, .85);
+    const layer = props.livePulse?.[index];
+    ensureLine(map, `guava-pulse-${index}`, props.view === 'Road Pulse' && props.roadScope === 'Everybody' ? layer?.lines || [] : [], layer?.color || '#edc7c8', layer?.width || 6, .85);
   }
   ensureLine(map, 'guava-alternatives', props.routes.filter((_, index) => index !== props.selectedRoute).map(route => route.coordinates), '#919aa5', 5, 0.75);
   const selected = props.routes[props.selectedRoute];
@@ -139,7 +158,7 @@ export default function GuavaMap(props: Props) {
   const markerRef = useRef<maplibregl.Marker | null>(null);
   const followRef = useRef(true);
   const lastCameraAtRef = useRef(0);
-  const styleRef = useRef<'normal' | 'quiet' | 'satellite'>('normal');
+  const styleRef = useRef<'normal' | 'dark' | 'quiet' | 'satellite'>('normal');
   const latest = useRef(props);
   latest.current = props;
 
@@ -164,15 +183,14 @@ export default function GuavaMap(props: Props) {
     map.on('click', event => {
       const current = latest.current;
       if (current.view !== 'Territory') return;
-      const ids = (current.demoTerritory ? WEEK_DRIVER_IDS.map(id => `guava-demo-${id}`)
-        : Object.keys(current.liveTerritory || {}).map(id => `guava-owned-${id}`)).filter(id => map.getLayer(id));
+      const ids = Object.keys(current.liveTerritory || {}).map(id => `guava-owned-${id}`).filter(id => map.getLayer(id));
       if (!ids.length) return;
       const feature = map.queryRenderedFeatures(event.point, { layers: ids })[0]
         || map.queryRenderedFeatures([[event.point.x - 10, event.point.y - 10], [event.point.x + 10, event.point.y + 10]], { layers: ids })[0];
       const unitId = feature?.properties?.unitId;
       const ownerId = feature?.properties?.ownerId;
       const stretchMeters = Number(feature?.properties?.stretchMeters);
-      current.onTerritorySelect(typeof unitId === 'string' && typeof ownerId === 'string' && Number.isFinite(stretchMeters) ? { unitId, ownerId, stretchMeters } : null);
+      current.onTerritorySelect(typeof unitId === 'string' && typeof ownerId === 'string' && Number.isFinite(stretchMeters) ? { unitId, ownerId: ownerId === 'contested' ? null : ownerId, stretchMeters } : null);
     });
     mapRef.current = map;
     return () => { window.removeEventListener('resize', resizeMap); window.removeEventListener('orientationchange', resizeMap); markerRef.current?.remove(); markerRef.current = null; map.remove(); mapRef.current = null; };
@@ -182,20 +200,23 @@ export default function GuavaMap(props: Props) {
     const map = mapRef.current;
     if (!map) return;
     const targetStyle = props.view === 'Satellite' && SATELLITE_STYLE ? 'satellite'
-      : props.view === 'Territory' || props.view === 'Road Pulse' ? 'quiet' : 'normal';
+      : props.view === 'Territory' || props.view === 'Road Pulse' ? 'quiet' : props.view === 'Regular' && props.regularMode === 'Dark' ? 'dark' : 'normal';
     if (styleRef.current !== targetStyle) {
       styleRef.current = targetStyle;
-      map.setStyle(targetStyle === 'satellite' ? SATELLITE_STYLE! : targetStyle === 'quiet' ? QUIET_STYLE : NORMAL_STYLE);
+      if (targetStyle === 'dark') {
+        void loadDarkStyle().then(style => { if (styleRef.current === 'dark') map.setStyle(style); })
+          .catch(() => { if (styleRef.current === 'dark') { styleRef.current = 'normal'; map.setStyle(NORMAL_STYLE); } });
+      } else map.setStyle(targetStyle === 'satellite' ? SATELLITE_STYLE! : targetStyle === 'quiet' ? QUIET_STYLE : NORMAL_STYLE);
       return;
     }
     syncMap(map, props);
-  }, [props.view, props.roadScope, props.trips, props.livePoints, props.routes, props.selectedRoute, props.isDriving, props.demoTerritory, props.liveTerritory, props.demoPulse, props.livePulse, props.selectedTerritoryOwner]);
+  }, [props.view, props.regularMode, props.roadScope, props.trips, props.livePoints, props.routes, props.selectedRoute, props.isDriving, props.liveTerritory, props.livePulse, props.selectedTerritoryOwner]);
 
   useEffect(() => {
     const map = mapRef.current;
     const selected = props.routes[props.selectedRoute];
     const snap = props.isDriving && props.position && selected ? snapToRoute(props.position, selected.coordinates) : null;
-    const shownPosition = props.demoLocation || snap?.point || props.position;
+    const shownPosition = snap?.point || props.position;
     if (!map || !shownPosition) return;
     if (!markerRef.current) {
       const marker = document.createElement('div');
@@ -206,14 +227,14 @@ export default function GuavaMap(props: Props) {
       map.easeTo({ center: shownPosition, zoom: 14.5, duration: 650 });
     }
     markerRef.current.setLngLat(shownPosition);
-    markerRef.current.setRotation(props.demoLocation ? 0 : props.heading ?? snap?.bearing ?? 0);
+    markerRef.current.setRotation(props.heading ?? snap?.bearing ?? 0);
     if (props.isDriving && followRef.current) {
       const now = performance.now();
       const duration = lastCameraAtRef.current ? Math.min(1600, Math.max(500, (now - lastCameraAtRef.current) * 0.9)) : 700;
       lastCameraAtRef.current = now;
       map.easeTo({ center: shownPosition, bearing: props.northUp ? 0 : (props.heading ?? snap?.bearing ?? map.getBearing()), pitch: 0, duration, essential: true });
     }
-  }, [props.position, props.heading, props.isDriving, props.northUp, props.demoLocation, props.routes, props.selectedRoute]);
+  }, [props.position, props.heading, props.isDriving, props.northUp, props.routes, props.selectedRoute]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -238,30 +259,6 @@ export default function GuavaMap(props: Props) {
     lastCameraAtRef.current = 0;
     map.easeTo({ center: props.position, zoom: props.isDriving ? 16 : 14.5, bearing: props.northUp ? 0 : (props.heading ?? 0), pitch: 0, duration: 500 });
   }, [props.centerCommand]);
-
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !props.demoTerritory || props.demoFocusCommand === 0) return;
-    if (props.demoLocation) {
-      map.easeTo({ center: props.demoLocation, zoom: 14.4, pitch: 0, bearing: 0, duration: 600 });
-      return;
-    }
-    const points = Object.values(props.demoTerritory).flatMap(layer => layer.lines).flat();
-    if (!points.length) return;
-    const bounds = points.reduce((box, point) => box.extend(point), new maplibregl.LngLatBounds(points[0], points[0]));
-    map.fitBounds(bounds, { padding: 55, duration: 600, maxZoom: 14 });
-  }, [props.demoFocusCommand, props.demoTerritory, props.demoLocation]);
-
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !props.liveTerritory || props.liveFocusCommand === 0) return;
-    const layers = props.selectedTerritoryOwner && props.liveTerritory[props.selectedTerritoryOwner]
-      ? [props.liveTerritory[props.selectedTerritoryOwner]] : Object.values(props.liveTerritory);
-    const points = layers.flatMap(layer => layer.lines).flat();
-    if (!points.length) return;
-    const bounds = points.reduce((box, point) => box.extend(point), new maplibregl.LngLatBounds(points[0], points[0]));
-    map.fitBounds(bounds, { padding: 55, duration: 600, maxZoom: 15.5 });
-  }, [props.liveFocusCommand]);
 
   return <div ref={nodeRef} className="map-canvas" aria-label="Interactive map" />;
 }

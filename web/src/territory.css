@@ -1,21 +1,9 @@
-.week-legend {
-  flex-wrap: wrap;
-  gap: 5px 8px;
-  overflow: visible;
-  white-space: normal;
-}
-
-.week-legend .legend-hint {
-  color: #697579;
-  font-weight: 600;
-}
-
 .territory-inspector {
   position: absolute;
   z-index: 7;
-  top: calc(env(safe-area-inset-top) + 76px);
-  right: 16px;
-  width: min(290px, calc(100vw - 32px));
+  top: calc(env(safe-area-inset-top) + 66px);
+  left: 16px;
+  width: min(310px, calc(100vw - 100px));
   display: grid;
   gap: 7px;
   padding: 12px 14px;
@@ -36,13 +24,11 @@
 .territory-inspector-head button { border: 0; background: transparent; display: grid; place-items: center; }
 .territory-inspector small { color: #647276; line-height: 1.35; }
 .territory-inspector b { font-size: 13px; }
+.territory-inspector.is-mine { border-color: #f18ca0; }
+.territory-inspector-scores { display: flex; justify-content: space-between; gap: 18px; color: #647276; font-size: 12px; }
+.territory-inspector-scores span { display: flex; align-items: baseline; gap: 5px; }
+.territory-inspector-scores strong { color: #172026; font-size: 16px; }
 
-.ranking-list .rank-map-button {
-  border: 0;
-  border-radius: 9px;
-  padding: 6px 8px;
-  background: #f18ca0;
-  color: #172026;
-  font-size: 11px;
-  font-weight: 800;
+@media (orientation: landscape) and (max-height: 600px) {
+  .territory-inspector { top: calc(env(safe-area-inset-top) + 52px); width: min(310px, 43vw); }
 }

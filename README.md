@@ -10,7 +10,8 @@ The app requires Google sign-in. Community play is opt-in and off by default. A 
 - The authenticated `submit-drive` function validates the complete drive, map-matches sampled coordinates, fills missed road visits, and writes the summary plus XP/distance/height only after Finish & Save.
 - Each session contributes at most one vote per road cell per Israel-calendar day, regardless of loops or travel direction. The daily contest closes at local midnight; ownership becomes final at about 09:05 Israel time the following morning to admit late uploads. The unique top driver wins; ties clear ownership; untouched cells keep their owner.
 - Territory paints only captured road sections. A tap identifies the owner and approximate section length. Road Pulse shows community roads only after three distinct opted-in drivers have used them. Names are displayed only for participants.
-- The live leaderboard uses hosted scores. The clearly labeled Game Lab remains a separate ten-player simulation for reviewing how a populated map might look.
+- The leaderboard and territory map show real opted-in community data.
+- Satellite uses MapTiler imagery. Add a browser-restricted MapTiler key as the GitHub Actions repository variable `VITE_MAPTILER_KEY` (and `web/.env.local` for local testing); until then the chooser correctly disables Satellite. MapTiler attribution must remain visible on the map.
 - Turning community play off deletes that player's shared drive summaries, scores, live visits and ownership; local browser drives remain.
 
 ## Current limits

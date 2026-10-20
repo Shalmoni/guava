@@ -2,7 +2,7 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App';
 import './style.css';
-import './week.css';
+import './territory.css';
 import './auth.css';
 import './button-alignment.css';
 

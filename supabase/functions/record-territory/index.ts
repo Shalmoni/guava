@@ -93,8 +93,9 @@ Deno.serve(async (request: Request) => {
   if (identityError || !identity.user || identity.user.is_anonymous) return reply(401, { error: 'Sign in again' });
   const admin = createClient(url, service, { auth: { persistSession: false } });
   const { data: profile, error: profileError } = await admin.from('guava_profiles')
-    .select('community_opt_in').eq('user_id', identity.user.id).single();
+    .select('community_opt_in,territory_detail_consent_at').eq('user_id', identity.user.id).single();
   if (profileError || !profile?.community_opt_in) return reply(403, { error: 'Community play is off' });
+  if (!profile.territory_detail_consent_at) return reply(403, { error: 'Review the updated territory sharing notice in Guava first' });
 
   let body: { sessionId?: string; startedAt?: number; points?: Fix[] };
   try { body = await request.json(); } catch { return reply(400, { error: 'Invalid territory segment' }); }

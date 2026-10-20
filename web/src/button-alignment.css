@@ -11,11 +11,6 @@ button {
 .text-action,
 .segmented button,
 .leaderboard-categories button,
-.lab-scenarios button,
-.week-map-tabs button,
-.week-map-heading button,
-.ranking-list .rank-map-button,
-.demo-map-tag,
 .route-options button {
   display: inline-flex;
   align-items: center;
