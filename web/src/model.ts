@@ -1,16 +1,20 @@
 export type Point = [number, number]; // longitude, latitude
-export type MapView = 'Regular' | 'Dark' | 'Territory' | 'Road Pulse' | 'Altitude';
-export type RoadScope = 'Everybody' | 'Mine';
+export type MapView = 'Regular' | 'Dark' | 'Satellite' | 'My Roads' | 'Territory' | 'Road Pulse' | 'Altitude';
 
 export interface DrivePoint {
   position: Point;
   altitude: number | null;
   timestamp: number;
   accuracy?: number;
+  // The first accepted fix after an interruption is an anchor, not a traversed
+  // connection from the preceding point.
+  segmentStart?: boolean;
 }
 
 export interface Trip {
   id: string;
+  // Missing only on legacy exports, whose account ownership is unknown.
+  ownerId?: string;
   startedAt: number;
   endedAt: number;
   points: DrivePoint[];
@@ -19,7 +23,10 @@ export interface Trip {
   newRoadUnits: number;
   xp: number;
   destination?: string;
-  communityStatus?: 'pending' | 'uploaded';
+  communityStatus?: 'pending' | 'uploaded' | 'failed';
+  communityError?: string;
+  retryAfter?: number;
+  uploadAttempts?: number;
 }
 
 export interface RouteStep {
@@ -40,19 +47,6 @@ export interface DrivingRoute {
 
 export const ISRAEL_CENTER: Point = [35.043, 32.461]; // Harish until browser location is available
 export const STORAGE_KEY = 'guava.web.trips.v1';
-
-export function loadTrips(): Trip[] {
-  try {
-    const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]') as Trip[];
-    return Array.isArray(parsed) ? parsed.filter(trip => Array.isArray(trip.points)) : [];
-  } catch {
-    return [];
-  }
-}
-
-export function saveTrips(trips: Trip[]) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(trips.slice(0, 100)));
-}
 
 export function distanceMeters(a: Point, b: Point): number {
   const earth = 6371000;
@@ -75,6 +69,7 @@ export function roadUnit(point: Point): string {
 export function tripUnits(points: DrivePoint[]): Set<string> {
   const units = new Set<string>();
   for (let index = 1; index < points.length; index++) {
+    if (points[index].segmentStart) continue;
     const from = points[index - 1].position;
     const to = points[index].position;
     const steps = Math.min(100, Math.max(1, Math.ceil(distanceMeters(from, to) / 12.5)));
@@ -86,6 +81,15 @@ export function tripUnits(points: DrivePoint[]): Set<string> {
   return units;
 }
 
+export function drivePointSegments(points: DrivePoint[]): DrivePoint[][] {
+  const segments: DrivePoint[][] = [];
+  for (const point of points) {
+    if (!segments.length || point.segmentStart) segments.push([]);
+    segments[segments.length - 1].push(point);
+  }
+  return segments;
+}
+
 export function finishTrip(
   points: DrivePoint[],
   startedAt: number,
@@ -94,13 +98,15 @@ export function finishTrip(
   older: Trip[],
   destination?: string,
   driveId?: string,
+  ownerId?: string,
+  endedAt = Date.now(),
 ): Trip | null {
   if (distance < 50 || points.length < 2) return null;
   const previous = new Set(older.flatMap(trip => [...tripUnits(trip.points)]));
   const units = tripUnits(points);
   const newRoadUnits = [...units].filter(unit => !previous.has(unit)).length;
   return {
-    id: driveId || crypto.randomUUID(), startedAt, endedAt: Date.now(), points,
+    id: driveId || crypto.randomUUID(), ownerId, startedAt, endedAt, points,
     distanceMeters: distance, heightMeters: height, newRoadUnits,
     xp: 10 + Math.floor(distance / 1000 * 8) + Math.floor(height / 20) + newRoadUnits * 2,
     destination,
@@ -112,6 +118,7 @@ export function fmtDistance(meters: number): string {
 }
 
 export function fmtTime(seconds: number): string {
+  if (seconds < 60) return `${Math.max(0, Math.round(seconds))} sec`;
   const minutes = Math.round(seconds / 60);
   return minutes < 60 ? `${minutes} min` : `${Math.floor(minutes / 60)} hr ${minutes % 60} min`;
 }

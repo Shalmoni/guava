@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Guava — synthetic drive QA</title>
+</head>
+<body>
+  <div id="root"></div>
+  <details id="qa-controls" open style="position:fixed;z-index:9999;top:76px;left:10px;right:10px;background:#fff;border:1px solid #555;padding:6px;font:12px sans-serif;color:#111">
+    <summary>Synthetic GPS controls (local QA only)</summary>
+    <button id="move">Move 47 m</button>
+    <button id="gap">GPS gap + 565 m</button>
+    <button id="deny">Deny GPS</button>
+    <button id="restore">Restore GPS</button>
+    <button id="older">Advance 8 hours</button>
+    <button id="hide">Hide QA controls</button>
+    <button id="locks">Inspect recorder locks</button>
+    <output id="lock-status"></output>
+  </details>
+  <script type="module">
+    // Separate dev-server entry; never included in the production build.
+    if (!import.meta.env.DEV || import.meta.env.VITE_SUPABASE_URL) {
+      throw new Error('Synthetic GPS QA requires a development server with Supabase disabled.');
+    }
+    const clock = Date.now.bind(Date);
+    let offset = Number(localStorage.getItem('guava.qa.offset') || 0);
+    let longitude = Number(localStorage.getItem('guava.qa.longitude') || 35.045);
+    Date.now = () => clock() + offset;
+    const watchers = new Map();
+    let nextId = 0;
+    let denied = false;
+    function emit() {
+      for (const { success, failure } of watchers.values()) {
+        if (denied) failure({ code: 1, message: 'Synthetic permission denial' });
+        else success({ timestamp: Date.now(), coords: {
+          longitude, latitude: 32.46, accuracy: 5, altitude: 50,
+          altitudeAccuracy: 3, heading: 90, speed: 15,
+        } });
+      }
+    }
+    Object.defineProperty(navigator, 'geolocation', { configurable: true, value: {
+      watchPosition(success, failure) {
+        const id = ++nextId;
+        watchers.set(id, { success, failure });
+        setTimeout(emit, 0);
+        return id;
+      },
+      clearWatch(id) { watchers.delete(id); },
+    } });
+    function move(meters, seconds) {
+      longitude += meters / 94100;
+      offset += seconds * 1000;
+      localStorage.setItem('guava.qa.offset', String(offset));
+      localStorage.setItem('guava.qa.longitude', String(longitude));
+      emit();
+    }
+    document.querySelector('#move').onclick = () => move(47, 3);
+    document.querySelector('#gap').onclick = () => move(565, 40);
+    document.querySelector('#deny').onclick = () => { denied = true; emit(); };
+    document.querySelector('#restore').onclick = () => { denied = false; emit(); };
+    document.querySelector('#older').onclick = () => move(0, 28800);
+    document.querySelector('#hide').onclick = () => { document.querySelector('#qa-controls').hidden = true; };
+    document.querySelector('#locks').onclick = async () => {
+      document.querySelector('#lock-status').textContent = JSON.stringify(await navigator.locks.query());
+    };
+    // Test crash recovery from the last durable sample, without a final checkpoint.
+    window.addEventListener('beforeunload', event => event.stopImmediatePropagation(), true);
+    setInterval(emit, 1000);
+    await import('/src/main.tsx');
+  </script>
+</body>
+</html>

@@ -55,3 +55,4 @@ drop policy "Round clock" on public.guava_territory_rounds;
 create policy "Participant round clock"
 on public.guava_territory_rounds for select to authenticated
 using ((select private.guava_is_participant()));
+;

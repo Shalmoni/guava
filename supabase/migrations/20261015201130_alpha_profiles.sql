@@ -29,3 +29,4 @@ with check (user_id = (select auth.uid()));
 create policy "Delete own profile"
 on public.guava_profiles for delete to authenticated
 using (user_id = (select auth.uid()));
+;

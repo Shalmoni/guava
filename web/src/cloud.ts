@@ -1,6 +1,8 @@
 import type { DrivePoint, Point, Trip } from './model';
 import { israelDay } from './territory';
 import { supabase } from './supabase';
+import { CloudUploadError, uploadError } from './cloudErrors';
+export { CloudUploadError } from './cloudErrors';
 
 export type CloudScore = {
   user_id: string;
@@ -79,35 +81,41 @@ export async function loadCloudGame(viewerId: string, hasDetailsConsent: boolean
   };
 }
 
-export async function uploadCommunityDrive(trip: Trip): Promise<{ xp: number; distance_m: number; height_m: number }> {
-  if (!supabase) throw new Error('Guava community is not connected.');
-  const { data, error } = await supabase.functions.invoke('submit-drive', {
-    body: { id: trip.id, startedAt: trip.startedAt, endedAt: trip.endedAt, points: trip.points },
-  });
-  if (error) {
-    const response = 'context' in error ? (error as { context?: Response }).context : undefined;
-    const payload = response ? await response.clone().json().catch(() => null) as { error?: string } | null : null;
-    throw new Error(payload?.error || error.message);
+async function uploadAuthorization(ownerId: string): Promise<{ Authorization: string }> {
+  if (!supabase) throw new CloudUploadError('Guava community is not connected.', true);
+  const { data, error } = await supabase.auth.getSession();
+  if (error || !data.session) throw new CloudUploadError('Sign in again before sharing this drive.', false, 401);
+  if (!ownerId || ownerId === 'local' || data.session.user.id !== ownerId) {
+    throw new CloudUploadError('This drive belongs to a different account.', false, 403);
   }
-  if (data?.already_saved) {
-    const { data: existing, error: readError } = await supabase.from('guava_game_drives')
-      .select('xp,distance_m,height_m').eq('id', trip.id).single();
-    if (readError || !existing) throw new Error('Drive was saved, but Guava could not load its shared score.');
-    return { xp: Number(existing.xp), distance_m: Number(existing.distance_m), height_m: Number(existing.height_m) };
-  }
-  return { xp: Number(data.xp || 0), distance_m: Number(data.distance_m || 0), height_m: Number(data.height_m || 0) };
+  // Capture the token before invoking: switching accounts during a queued upload
+  // must never submit A's trip with B's credentials.
+  return { Authorization: `Bearer ${data.session.access_token}` };
 }
 
-export async function bankTerritorySegment(sessionId: string, startedAt: number, points: DrivePoint[]): Promise<number> {
-  if (!supabase) throw new Error('Guava community is not connected.');
-  const { data, error } = await supabase.functions.invoke('record-territory', {
-    body: { sessionId, startedAt, points },
+export async function uploadCommunityDrive(trip: Trip, ownerId: string): Promise<{ xp: number; distance_m: number; height_m: number; late_units: number }> {
+  if (!supabase) throw new CloudUploadError('Guava community is not connected.', true);
+  if (trip.ownerId !== ownerId) throw new CloudUploadError('This drive belongs to a different account.', false, 403);
+  const headers = await uploadAuthorization(ownerId);
+  const { data, error } = await supabase.functions.invoke('submit-drive', {
+    headers,
+    body: { id: trip.id, ownerId, startedAt: trip.startedAt, endedAt: trip.endedAt, points: trip.points },
   });
-  if (error) {
-    const response = 'context' in error ? (error as { context?: Response }).context : undefined;
-    const payload = response ? await response.clone().json().catch(() => null) as { error?: string } | null : null;
-    throw new Error(payload?.error || error.message);
+  if (error) throw await uploadError(error);
+  if (!data || !Number.isFinite(data.xp) || !Number.isFinite(data.distance_m) || !Number.isFinite(data.height_m)) {
+    throw new CloudUploadError('The shared drive response was incomplete. Retry to confirm it was saved.', true);
   }
+  return { xp: data.xp, distance_m: data.distance_m, height_m: data.height_m, late_units: Number(data.late_units || 0) };
+}
+
+export async function bankTerritorySegment(sessionId: string, startedAt: number, points: DrivePoint[], ownerId: string): Promise<number> {
+  if (!supabase) throw new CloudUploadError('Guava community is not connected.', true);
+  const headers = await uploadAuthorization(ownerId);
+  const { data, error } = await supabase.functions.invoke('record-territory', {
+    headers,
+    body: { sessionId, ownerId, startedAt, points },
+  });
+  if (error) throw await uploadError(error);
   return Number(data?.banked || 0);
 }
 

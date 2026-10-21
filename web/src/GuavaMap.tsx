@@ -2,8 +2,8 @@ import { useEffect, useRef } from 'react';
 import * as maplibregl from 'maplibre-gl';
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import type { DrivingRoute, DrivePoint, MapView, Point, RoadScope, Trip } from './model';
-import { ISRAEL_CENTER } from './model';
+import type { DrivingRoute, DrivePoint, MapView, Point, Trip } from './model';
+import { drivePointSegments, ISRAEL_CENTER } from './model';
 import { snapToRoute, traversedRoute } from './navigation';
 
 type TerritoryLayer = { color: string; lines: Point[][]; unitIds: string[]; stretchMeters: number[]; width: number };
@@ -11,7 +11,6 @@ export type TerritorySelection = { unitId: string; ownerId: string | null; stret
 
 type Props = {
   view: MapView;
-  roadScope: RoadScope;
   trips: Trip[];
   livePoints: DrivePoint[];
   routes: DrivingRoute[];
@@ -30,6 +29,9 @@ type Props = {
 
 const NORMAL_STYLE = 'https://tiles.openfreemap.org/styles/bright';
 const QUIET_STYLE = 'https://tiles.openfreemap.org/styles/positron';
+// EOX's public 2025 Sentinel-2 layer works for a noncommercial friends trial.
+// Replace the provider before any commercial release; see README.md.
+const SATELLITE_TILES = 'https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-2025_3857/default/g/{z}/{y}/{x}.jpg';
 const TERRAIN_TILES = 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png';
 maplibregl.setWorkerUrl(workerUrl);
 
@@ -87,11 +89,41 @@ async function loadDarkStyle(): Promise<maplibregl.StyleSpecification> {
   return style;
 }
 
+async function loadSatelliteStyle(): Promise<maplibregl.StyleSpecification> {
+  const response = await fetch(NORMAL_STYLE);
+  if (!response.ok) throw new Error('Satellite map labels are unavailable');
+  const style = await response.json() as maplibregl.StyleSpecification;
+  for (const layer of style.layers) {
+    const paint = (layer.paint ||= {}) as Record<string, unknown>;
+    if (layer.type === 'fill') paint['fill-opacity'] = 0;
+    else if (layer.type === 'line') paint['line-opacity'] = 0.65;
+    else if (layer.type === 'symbol') {
+      paint['text-color'] = '#fff';
+      paint['text-halo-color'] = '#172026';
+      paint['text-halo-width'] = 1.5;
+    }
+  }
+  return style;
+}
+
 function syncMap(map: maplibregl.Map, props: Props) {
   if (!map.isStyleLoaded()) return;
+  if (props.view !== 'Satellite' && map.getLayer('guava-satellite')) {
+    map.removeLayer('guava-satellite');
+    map.removeSource('guava-satellite');
+  }
+  if (props.view === 'Satellite' && !map.getSource('guava-satellite')) {
+    map.addSource('guava-satellite', {
+      type: 'raster', tiles: [SATELLITE_TILES], tileSize: 256,
+      maxzoom: 14,
+    });
+    // Keep the road network and place labels legible over the imagery.
+    const firstLineOrLabel = map.getStyle().layers.find(layer => layer.type === 'line' || layer.type === 'symbol')?.id;
+    map.addLayer({ id: 'guava-satellite', type: 'raster', source: 'guava-satellite' }, firstLineOrLabel);
+  }
   // Bright's transit layer is unusually dense in Harish; show individual
   // stops only at street-level zoom while keeping main roads and place names.
-  if (map.getLayer('poi_transit') && (props.view === 'Regular' || props.view === 'Altitude')) {
+  if (map.getLayer('poi_transit') && (props.view === 'Regular' || props.view === 'Altitude' || props.view === 'Satellite')) {
     map.setLayerZoomRange('poi_transit', 16, 24);
   }
   if (props.view !== 'Altitude' && map.getLayer('guava-altitude')) {
@@ -119,8 +151,8 @@ function syncMap(map: maplibregl.Map, props: Props) {
       },
     }, firstWaterOrRoad);
   }
-  const saved = props.trips.map(trip => trip.points.map(point => point.position));
-  const live = props.livePoints.map(point => point.position);
+  const saved = props.trips.flatMap(trip => drivePointSegments(trip.points).map(segment => segment.map(point => point.position)));
+  const live = drivePointSegments(props.livePoints).map(segment => segment.map(point => point.position));
   // Saved GPS is private. Territory paints only settled, public ownership.
   ensureLine(map, 'guava-territory', [], '#f18ca0', 9, 0.72);
   const liveIds = new Set(Object.keys(props.liveTerritory || {}).map(id => `guava-owned-${id}`));
@@ -135,11 +167,11 @@ function syncMap(map: maplibregl.Map, props: Props) {
       selected === id ? 12 : layer.width, selected && selected !== id ? .3 : .92,
       index => ({ unitId: layer.unitIds[index] || '', ownerId: id, stretchMeters: String(layer.stretchMeters[index] || 0) }));
   }
-  ensureLine(map, 'guava-live', props.view === 'Territory' && !props.routes.length ? [live] : [], '#f4a7bb', 7, 0.86);
-  ensureLine(map, 'guava-road-pulse', props.view === 'Road Pulse' && props.roadScope === 'Mine' ? saved : [], '#d35377', 9, 0.22);
+  ensureLine(map, 'guava-live', props.view === 'Territory' && !props.routes.length ? live : [], '#f4a7bb', 7, 0.86);
+  ensureLine(map, 'guava-my-roads', props.view === 'My Roads' ? saved : [], '#d35377', 7, 0.82);
   for (let index = 0; index < 4; index++) {
     const layer = props.livePulse?.[index];
-    ensureLine(map, `guava-pulse-${index}`, props.view === 'Road Pulse' && props.roadScope === 'Everybody' ? layer?.lines || [] : [], layer?.color || '#edc7c8', layer?.width || 6, .85);
+    ensureLine(map, `guava-pulse-${index}`, props.view === 'Road Pulse' ? layer?.lines || [] : [], layer?.color || '#edc7c8', layer?.width || 6, .85);
   }
   ensureLine(map, 'guava-alternatives', props.routes.filter((_, index) => index !== props.selectedRoute).map(route => route.coordinates), '#919aa5', 5, 0.75);
   const selected = props.routes[props.selectedRoute];
@@ -154,7 +186,7 @@ export default function GuavaMap(props: Props) {
   const markerRef = useRef<maplibregl.Marker | null>(null);
   const followRef = useRef(true);
   const lastCameraAtRef = useRef(0);
-  const styleRef = useRef<'normal' | 'dark' | 'quiet'>('normal');
+  const styleRef = useRef<'normal' | 'dark' | 'quiet' | 'satellite'>('normal');
   const latest = useRef(props);
   latest.current = props;
 
@@ -195,17 +227,20 @@ export default function GuavaMap(props: Props) {
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
-    const targetStyle = props.view === 'Territory' || props.view === 'Road Pulse' ? 'quiet' : props.view === 'Dark' ? 'dark' : 'normal';
+    const targetStyle = props.view === 'Territory' || props.view === 'Road Pulse' || props.view === 'My Roads' ? 'quiet' : props.view === 'Dark' ? 'dark' : props.view === 'Satellite' ? 'satellite' : 'normal';
     if (styleRef.current !== targetStyle) {
       styleRef.current = targetStyle;
       if (targetStyle === 'dark') {
         void loadDarkStyle().then(style => { if (styleRef.current === 'dark') map.setStyle(style); })
           .catch(() => { if (styleRef.current === 'dark') { styleRef.current = 'normal'; map.setStyle(NORMAL_STYLE); } });
+      } else if (targetStyle === 'satellite') {
+        void loadSatelliteStyle().then(style => { if (styleRef.current === 'satellite') map.setStyle(style); })
+          .catch(() => { if (styleRef.current === 'satellite') map.setStyle(NORMAL_STYLE); });
       } else map.setStyle(targetStyle === 'quiet' ? QUIET_STYLE : NORMAL_STYLE);
       return;
     }
     syncMap(map, props);
-  }, [props.view, props.roadScope, props.trips, props.livePoints, props.routes, props.selectedRoute, props.isDriving, props.liveTerritory, props.livePulse, props.selectedTerritoryOwner]);
+  }, [props.view, props.trips, props.livePoints, props.routes, props.selectedRoute, props.isDriving, props.liveTerritory, props.livePulse, props.selectedTerritoryOwner]);
 
   useEffect(() => {
     const map = mapRef.current;

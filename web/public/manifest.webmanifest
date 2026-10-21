@@ -8,7 +8,7 @@
   "theme_color": "#ffffff",
   "icons": [
     {
-      "src": "guava-logo.png",
+      "src": "guava-app-icon.png",
       "sizes": "1254x1254",
       "type": "image/png"
     }

@@ -82,3 +82,4 @@ begin
     'new_units', v_new, 'unit_count', jsonb_array_length(p_units));
 end;
 $$;
+;

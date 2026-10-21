@@ -15,14 +15,16 @@
 <body><main>
   <p><a href="./">← Back to Guava</a></p>
   <h1>Guava privacy notice</h1>
-  <p>Updated October 19, 2026. Guava is a driving map and road game. Do not rely on it as your only navigation or traffic source.</p>
+  <p>Updated October 20, 2026. Guava is a map for tracking drives, with an optional road game. Do not rely on it as your only navigation or traffic source.</p>
 
   <h2>Your account</h2>
   <p>Google sign-in provides Guava with a basic account identifier, email address, and name. Supabase stores your Guava account and display name. Other players do not see your email address. Your community profile is off by default.</p>
 
   <h2>Location and drives</h2>
-  <p>The app requests location while the web page is open. It records a drive after you tap Start. Full GPS samples for saved drives are stored in this browser. They may be lost if you clear browser storage or switch devices. You can export them in Settings.</p>
+  <p>The app requests location while the web page is open. It records a drive after you tap Start. Full GPS samples and saved drive history are stored in this browser, separately for each signed-in account. Signing out does not delete that account’s local history; signing in again to the same account on the same browser makes it available. Local data may be lost if you clear browser storage, and it does not follow you to another browser or device. You can export saved drives in Settings.</p>
+  <p>During an active drive, Guava keeps a local recovery copy as recording progresses. If the page reloads or closes, you can reopen the app in the same browser and account to resume or save the available recording. This does not restore GPS samples missed while the browser was paused, closed or unable to get your location.</p>
   <p>If you explicitly join community play under the current notice, Guava sends short GPS segments over HTTPS to its Supabase function <strong>while you drive</strong> after you have traveled at least 50 m. The function sends sampled coordinates to the public OSRM road-matching service. Guava stores matched road-unit visits with their day, your account identifier, and the session’s timing—not the full raw GPS trace. Those visits can count even if you later discard the trip record. When you Finish &amp; Save, the completed drive is sent for shared XP, distance and height. Guava stores the drive summary and scores, not the full GPS trace, in Supabase. Territory ownership becomes final the following morning, around 09:05 Israel time, to allow late uploads. Participating players can see settled captured and tied roads; on already-shared roads they can see anonymous contest counts once more than one driver competes. Captured roads and your display name can reveal places you visit, including near home or work. Only enable community play if you are comfortable with this.</p>
+  <p>If a saved community drive cannot upload because of a temporary connection or matching problem, Guava can retry while the app is open and connected for up to seven days after the drive ends. A late accepted upload can still add shared XP, distance, height and Road Pulse usage. Territory votes must arrive before the next morning’s 09:05 Israel-time deadline; late uploads do not change settled ownership. The local drive remains in this browser even if it cannot be shared.</p>
   <p>Turning community play off removes your shared drives, scores, and claims from Guava’s database. Your browser’s saved drives remain until you clear site data. Previously viewed or copied information cannot be recalled from other people.</p>
 
   <h2>Other services</h2>

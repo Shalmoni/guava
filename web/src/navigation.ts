@@ -1,4 +1,4 @@
-import type { Point } from './model';
+import { distanceMeters, type DrivingRoute, type Point } from './model';
 
 export type RoadSnap = {
   point: Point;
@@ -40,4 +40,31 @@ export function snapToRoute(position: Point, route: Point[], maxDistanceMeters =
 
 export function traversedRoute(route: Point[], snap: RoadSnap | null): Point[] {
   return snap ? [...route.slice(0, snap.segmentIndex + 1), snap.point] : [];
+}
+
+export function routeProgress(position: Point, route: DrivingRoute) {
+  const snap = snapToRoute(position, route.coordinates);
+  if (!snap) return null;
+  let total = 0;
+  let behind = 0;
+  for (let index = 0; index < route.coordinates.length - 1; index++) {
+    const length = distanceMeters(route.coordinates[index], route.coordinates[index + 1]);
+    total += length;
+    if (index < snap.segmentIndex) behind += length;
+  }
+  behind += distanceMeters(route.coordinates[snap.segmentIndex], snap.point);
+  const fraction = total > 0 ? Math.min(1, behind / total) : 0;
+  const travelled = route.distance * fraction;
+  let nextStep = Math.min(1, route.steps.length - 1);
+  let stepDistance = route.steps[0]?.distance || 0;
+  while (nextStep < route.steps.length - 1 && travelled >= stepDistance - 15) {
+    stepDistance += route.steps[nextStep].distance;
+    nextStep++;
+  }
+  return {
+    remaining: Math.max(0, route.distance - travelled),
+    seconds: Math.max(0, route.duration * (1 - fraction)),
+    nextStep: Math.max(0, nextStep),
+    arrived: total - behind < 25 && distanceMeters(position, route.coordinates.at(-1)!) < 35,
+  };
 }

@@ -120,8 +120,7 @@ begin
   if exists (select 1 from public.guava_game_drives where id = p_id) then
     return jsonb_build_object('already_saved', true);
   end if;
-  for v_unit in select distinct on (value->>'id') value
-      from jsonb_array_elements(p_units) order by value->>'id' loop
+  for v_unit in select value from jsonb_array_elements(p_units) loop
     v_id := v_unit->>'id';
     if v_id is null or length(v_id) not between 3 and 90
        or jsonb_typeof(v_unit->'line') <> 'array'
@@ -129,8 +128,7 @@ begin
        or (v_unit->>'length_m')::integer not between 1 and 50 then
       raise exception 'Invalid road unit';
     end if;
-    if not exists (select 1 from public.guava_unit_visits
-                   where unit_id = v_id and user_id = p_user_id) then
+    if not exists (select 1 from public.guava_road_units where id = v_id) then
       v_new := v_new + 1;
     end if;
   end loop;
@@ -244,3 +242,4 @@ select cron.schedule(
   'guava-territory-daily', '5 0 * * *',
   $$select public.guava_settle_round(((now() at time zone 'UTC')::date - 1))$$
 );
+;

@@ -314,3 +314,4 @@ select cron.schedule(
   'guava-territory-daily', '5 * * * *',
   $$select public.guava_settle_due_round()$$
 );
+;

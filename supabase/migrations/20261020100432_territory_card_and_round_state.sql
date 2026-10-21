@@ -91,3 +91,4 @@ as $$
 $$;
 revoke all on function public.guava_territory_public_scores(uuid,text[]) from public, anon, authenticated;
 grant execute on function public.guava_territory_public_scores(uuid,text[]) to service_role;
+;

@@ -18,3 +18,307 @@ html,body,#root{overflow:hidden}.app-shell{min-height:0;overscroll-behavior:none
 .view-group{display:grid;gap:6px}
 .live-podium{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));align-items:end;gap:7px;min-height:176px;margin:18px 0 12px}.live-podium>div{display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:3px;min-width:0;border-radius:15px 15px 6px 6px;padding:11px 5px 8px;text-align:center;background:#edf0f1}.live-podium .place-1{grid-column:2;grid-row:1;min-height:171px;background:#f18ca0}.live-podium .place-2{grid-column:1;grid-row:1;min-height:139px;background:#dbe1e3}.live-podium .place-3{grid-column:3;grid-row:1;min-height:113px;background:#e7d4c5}.live-podium .podium-avatar{background:#fff9;width:35px;height:35px}.live-podium strong{font-size:12px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.live-podium small{font-size:10px;white-space:nowrap}.live-podium b{font-size:23px;line-height:1}
 .round-clock{align-items:center;text-align:center;padding:10px 13px}.round-clock strong{font-variant-numeric:tabular-nums;font-size:30px;letter-spacing:.03em}
+
+/* Keep pink for the main action and selected states; information stays quieter. */
+.tools-control,
+.right-menu > button > span,
+.right-menu .bubble-anchor {
+  background: #fff;
+}
+
+.brand-logo { transform: scale(1.25); }
+.signin-brand .brand-logo { transform: scale(1.16); }
+
+.satellite-credit {
+  position: absolute;
+  z-index: 3;
+  top: calc(env(safe-area-inset-top) + 70px);
+  left: 16px;
+  display: flex;
+  flex-direction: column;
+  max-width: min(250px, calc(100vw - 100px));
+  padding: 8px 10px;
+  border-radius: 11px;
+  background: rgba(255, 255, 255, .94);
+  color: #354147;
+  box-shadow: 0 4px 16px #1720261c;
+  font-size: 10px;
+  line-height: 1.25;
+}
+.satellite-credit a { color: #8f3f59; font-weight: 700; }
+@media (orientation: landscape) and (max-height: 600px) {
+  .satellite-credit { top: calc(env(safe-area-inset-top) + 54px); }
+}
+
+.pink-button,
+.subtle-action,
+.text-action,
+.bubble-menu > button:not(.bubble-anchor),
+.segmented button,
+.leaderboard-categories button,
+.route-options button,
+.dock-footer button,
+.settings-label {
+  font-weight: 600;
+}
+
+.sheet-header h2,
+.planner-heading strong,
+.full-header h2,
+.profile-body h3 {
+  font-weight: 700;
+  letter-spacing: -.025em;
+}
+
+.xp-card {
+  background: #fff0f3;
+  border: 1px solid #f1dce2;
+}
+
+.xp-card small {
+  color: #71515b;
+  font-weight: 700;
+  letter-spacing: .08em;
+}
+
+.xp-card strong { font-weight: 700; letter-spacing: -.04em; }
+.xp-track { background: #f2d5de; }
+.xp-track span { background: #bb5a77; }
+.view-icon { background: #f8e6ec; }
+.view-list button.active .view-icon { background: #f18ca0; }
+.round-clock > span { font-weight: 700; }
+.driving-status { color: #18865b; }
+.dock-metrics small { color: #65747c; font-size: 9px; letter-spacing: .035em; }
+
+button:focus-visible,
+a:focus-visible {
+  outline: 3px solid #ad4f69;
+  outline-offset: 3px;
+}
+
+/* Dark map controls use the same visual hierarchy as the light map. */
+.app-shell.is-dark { color: #edf3f5; background: #10191f; }
+.app-shell.is-dark .full-screen-panel { background: #10191f; }
+
+.app-shell.is-dark .brand-pill,
+.app-shell.is-dark .round-control,
+.app-shell.is-dark .zoom-stack,
+.app-shell.is-dark .zoom-stack button,
+.app-shell.is-dark .planner-card,
+.app-shell.is-dark .drive-dock,
+.app-shell.is-dark .bottom-sheet,
+.app-shell.is-dark .location-note,
+.app-shell.is-dark .territory-inspector,
+.app-shell.is-dark .map-context,
+.app-shell.is-dark .bubble-menu > button > span,
+.app-shell.is-dark .bubble-anchor {
+  color: #edf3f5;
+  background: #1d2a32;
+  box-shadow: 0 5px 18px #0004;
+}
+
+.app-shell.is-dark .round-control:hover,
+.app-shell.is-dark .zoom-stack button:hover {
+  background: #293944;
+}
+
+.app-shell.is-dark .zoom-stack button + button,
+.app-shell.is-dark .full-header,
+.app-shell.is-dark .history-row,
+.app-shell.is-dark .search-results > button,
+.app-shell.is-dark .dock-metrics > div + div {
+  border-color: #34434c;
+}
+
+.app-shell.is-dark .planner-heading button,
+.app-shell.is-dark .sheet-header button,
+.app-shell.is-dark .full-header button,
+.app-shell.is-dark .search-field,
+.app-shell.is-dark .route-options button,
+.app-shell.is-dark .subtle-action,
+.app-shell.is-dark .dock-mode,
+.app-shell.is-dark .dock-map,
+.app-shell.is-dark .avatar,
+.app-shell.is-dark .stats-grid > div,
+.app-shell.is-dark .leaderboard-categories button,
+.app-shell.is-dark .round-clock,
+.app-shell.is-dark .ranking-list,
+.app-shell.is-dark .view-list button,
+.app-shell.is-dark .welcome-choice,
+.app-shell.is-dark .settings-label.community-toggle {
+  color: #edf3f5;
+  background: #26343d;
+  border-color: #34434c;
+}
+
+.app-shell.is-dark .search-field input,
+.app-shell.is-dark .search-results > button,
+.app-shell.is-dark .text-action,
+.app-shell.is-dark .territory-inspector-head button,
+.app-shell.is-dark .territory-inspector-scores strong {
+  color: #edf3f5;
+}
+
+.app-shell.is-dark .search-field input::placeholder { color: #b8c5cb; }
+.app-shell.is-dark .bubble-menu > button:not(.bubble-anchor) { color: #edf3f5; text-shadow: 0 1px 5px #000; }
+.app-shell.is-dark .settings-label input { color: #edf3f5; background: #1d2a32; border-color: #45555f; }
+.app-shell.is-dark .xp-card { background: #352830; border-color: #59404b; }
+.app-shell.is-dark .xp-card small { color: #edb8c7; }
+.app-shell.is-dark .xp-track { background: #654451; }
+.app-shell.is-dark .xp-track span { background: #f18ca0; }
+.app-shell.is-dark .view-icon { color: #f18ca0; background: #49323c; }
+.app-shell.is-dark .view-list button.active { border-color: #f18ca0; }
+.app-shell.is-dark .view-list button.active .view-icon { color: #172026; background: #f18ca0; }
+.app-shell.is-dark .selected-mark { color: #f18ca0; }
+
+.app-shell.is-dark .route-options button.selected,
+.app-shell.is-dark .leaderboard-categories button.active,
+.app-shell.is-dark .live-podium .place-1 {
+  color: #172026;
+  background: #f18ca0;
+}
+
+.app-shell.is-dark .live-podium .place-2 { color: #edf3f5; background: #42535e; }
+.app-shell.is-dark .live-podium .place-3 { color: #edf3f5; background: #59483e; }
+.app-shell.is-dark .live-podium .podium-avatar { color: #172026; }
+.app-shell.is-dark .ranking-list > div + div { border-color: #34434c; }
+.app-shell.is-dark .turn-banner { color: #172026; }
+.app-shell.is-dark .driving-status { color: #6ddeaa; }
+.app-shell.is-dark .territory-sync-warning { color: #f0a5b6; }
+.app-shell.is-dark .stats-grid svg { color: #f18ca0; }
+.app-shell.is-dark .privacy-note a { color: #f18ca0; }
+
+.app-shell.is-dark .hint,
+.app-shell.is-dark .search-results small,
+.app-shell.is-dark .destination-title small,
+.app-shell.is-dark .planner-footer small,
+.app-shell.is-dark .dock-metrics small,
+.app-shell.is-dark .bottom-sheet > p,
+.app-shell.is-dark .view-list small,
+.app-shell.is-dark .identity-card small,
+.app-shell.is-dark .stats-grid small,
+.app-shell.is-dark .history-row small,
+.app-shell.is-dark .empty-note,
+.app-shell.is-dark .privacy-note,
+.app-shell.is-dark .round-clock > span,
+.app-shell.is-dark .round-clock small,
+.app-shell.is-dark .settings-label,
+.app-shell.is-dark .welcome-choice span,
+.app-shell.is-dark .welcome-sheet > small,
+.app-shell.is-dark .territory-inspector small,
+.app-shell.is-dark .territory-inspector-scores {
+  color: #b8c5cb;
+}
+
+.app-shell.is-dark button:focus-visible,
+.app-shell.is-dark a:focus-visible {
+  outline-color: #f18ca0;
+}
+
+.nickname-field { margin-top: 16px; }
+.settings-status {
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: #f5f5f4;
+  color: #58666b;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.settings-status strong { color: #172026; }
+.location-note > svg { flex: none; }
+.location-note > span { flex: 1; }
+.location-note .text-action {
+  flex: none;
+  padding: 7px 2px;
+  color: #8f3f59;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.storage-warning {
+  position: absolute;
+  z-index: 22;
+  top: calc(env(safe-area-inset-top) + 72px);
+  left: 16px;
+  right: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  max-width: 540px;
+  margin: auto;
+  padding: 13px 15px;
+  border: 1px solid #e8c49e;
+  border-radius: 15px;
+  background: #fff6eb;
+  color: #68431f;
+  box-shadow: 0 5px 18px #17202626;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.storage-warning button {
+  align-self: flex-start;
+  border: 1px solid #d9b38d;
+  border-radius: 9px;
+  padding: 8px 11px;
+  color: #68431f;
+  background: #fff;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.history-row > span:first-child { flex: 1; min-width: 0; }
+.history-row > span:last-child { align-items: flex-end; max-width: 45%; text-align: right; }
+.history-row .text-action { padding: 7px 0; color: #8f3f59; font-size: 12px; }
+.driving-status.is-waiting { color: #946018; }
+.driving-status.is-waiting span { background: #c08a32; }
+.app-shell.is-dark .settings-status { color: #b8c5cb; background: #26343d; }
+.app-shell.is-dark .settings-status strong { color: #edf3f5; }
+.app-shell.is-dark .location-note .text-action,
+.app-shell.is-dark .history-row .text-action { color: #f18ca0; }
+.app-shell.is-dark .storage-warning { background: #362b21; border-color: #806240; color: #f4d1a7; }
+.app-shell.is-dark .storage-warning button { background: #4b3826; border-color: #806240; color: #f4d1a7; }
+.app-shell.is-dark .driving-status.is-waiting { color: #e7bd76; }
+
+/* Keep the map full-screen even when MapLibre's stylesheet loads lazily. */
+.app-shell .map-canvas {
+  position: absolute;
+  inset: 0;
+}
+
+.account-tab-notice {
+  position: absolute;
+  z-index: 21;
+  top: calc(env(safe-area-inset-top) + 72px);
+  left: 16px;
+  right: 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: 540px;
+  margin: auto;
+  padding: 12px 14px;
+  border: 1px solid #dce3e5;
+  border-radius: 15px;
+  background: #f5f8f9;
+  color: #394c57;
+  box-shadow: 0 5px 18px #17202626;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.account-tab-notice button {
+  flex: none;
+  border: 0;
+  border-radius: 9px;
+  padding: 9px 10px;
+  background: #e3eaed;
+  color: #172026;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.account-tab-notice ~ .storage-warning { top: calc(env(safe-area-inset-top) + 190px); }
+.app-shell.is-dark .account-tab-notice { background: #26343d; border-color: #45555f; color: #d4e1e7; }
+.app-shell.is-dark .account-tab-notice button { background: #42535e; color: #edf3f5; }

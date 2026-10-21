@@ -1,28 +1,32 @@
-name: Deploy Guava web app
+name: Validate and deploy Guava
 
 on:
   push:
     branches: [main]
     paths:
       - 'web/**'
+      - 'supabase/**'
+      - '.github/workflows/deploy-pages.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'web/**'
+      - 'supabase/**'
       - '.github/workflows/deploy-pages.yml'
   workflow_dispatch:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 concurrency:
-  group: pages
+  group: guava-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+  validate:
+    name: Web and database checks
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -34,15 +38,50 @@ jobs:
         working-directory: web
       - run: npm test
         working-directory: web
+      - name: Test database migrations in isolated PostgreSQL
+        env:
+          GUAVA_PGLITE_MODULE: ${{ runner.temp }}/guava-sql-tests/node_modules/@electric-sql/pglite/dist/index.js
+        run: |
+          npm install --prefix "$RUNNER_TEMP/guava-sql-tests" --ignore-scripts --no-audit --no-fund @electric-sql/pglite@0.5.10
+          node --test supabase/tests/reliable_saved_drives.test.mjs
+      - name: Check production browser configuration
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        env:
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
+        run: |
+          node --input-type=module <<'JS'
+          const url = process.env.VITE_SUPABASE_URL;
+          const key = process.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+          if (!url || new URL(url).protocol !== 'https:' || !key?.startsWith('sb_publishable_')) {
+            throw new Error('Configure VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY as repository variables before publishing.');
+          }
+          JS
       - run: npm run build
         working-directory: web
         env:
           VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
           VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
           VITE_REQUIRE_AUTH: 'true'
-      - uses: actions/configure-pages@v5
+          VITE_GEOCODER_URL: ${{ vars.VITE_GEOCODER_URL }}
+          VITE_ROUTER_URL: ${{ vars.VITE_ROUTER_URL }}
       - uses: actions/upload-pages-artifact@v3
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         with:
           path: web/dist
+
+  deploy:
+    name: Publish validated web build
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: validate
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/configure-pages@v5
       - id: deployment
         uses: actions/deploy-pages@v4
