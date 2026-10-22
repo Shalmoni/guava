@@ -21,8 +21,8 @@ Deno.serve(async (request: Request) => {
   if (identityError || !identity.user || identity.user.is_anonymous) return reply(401, { error: 'Sign in again' });
   const admin = createClient(url, service, { auth: { persistSession: false } });
   const { data: profile, error: profileError } = await admin.from('guava_profiles')
-    .select('community_opt_in,territory_detail_consent_at').eq('user_id', identity.user.id).single();
-  if (profileError || !profile?.community_opt_in || !profile.territory_detail_consent_at) return reply(403, { error: 'Review territory sharing in Guava' });
+    .select('community_opt_in,territory_detail_consent_at,open_territory_consent_at').eq('user_id', identity.user.id).single();
+  if (profileError || !profile?.community_opt_in || !profile.territory_detail_consent_at || !profile.open_territory_consent_at) return reply(403, { error: 'Review territory sharing in Guava' });
   let body: { unitIds?: unknown };
   try { body = await request.json(); } catch { return reply(400, { error: 'Invalid request' }); }
   if (!Array.isArray(body.unitIds) || body.unitIds.length > 5000
@@ -34,6 +34,5 @@ Deno.serve(async (request: Request) => {
     p_viewer: identity.user.id, p_unit_ids: [...new Set(body.unitIds)],
   });
   if (error) return reply(503, { error: 'Territory scores are temporarily unavailable' });
-  // A lone visit on an already-public road is not a public live activity signal.
-  return reply(200, { scores: (data || []).filter((row: { player_count: number }) => row.player_count > 1) });
+  return reply(200, { scores: data || [] });
 });

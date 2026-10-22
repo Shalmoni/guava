@@ -17,7 +17,7 @@ long traces, GPS gaps, request limits, retryable errors and account-bound upload
 credentials. No real route or user trace is submitted.
 
 The database test applies the repository's real schema and the pending
-`20261020141615_reliable_saved_drives.sql` migration to isolated PostgreSQL using
+database migrations to isolated PostgreSQL using
 PGlite. Only the unsupported cron scheduler setup is omitted; settlement is
 called directly. It verifies ingestion beyond the old limit, late uploads,
 idempotency, exploration credit, consent, ownership and RPC permissions.
@@ -75,6 +75,7 @@ supabase db push --linked
 supabase secrets set --project-ref "$GUAVA_PROJECT_REF" "ROAD_MATCH_URL=$GUAVA_ROAD_MATCH_URL"
 supabase functions deploy submit-drive --project-ref "$GUAVA_PROJECT_REF" --use-api
 supabase functions deploy record-territory --project-ref "$GUAVA_PROJECT_REF" --use-api
+supabase functions deploy territory-snapshot --project-ref "$GUAVA_PROJECT_REF" --use-api
 ```
 
 The function bundle automatically includes its imported `_shared/drive.ts`.

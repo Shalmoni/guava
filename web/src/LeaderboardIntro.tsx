@@ -51,7 +51,7 @@ export default function LeaderboardIntro({ onClose }: Props) {
       <div className="leaderboard-guide">
         <div><Sparkles size={21} /><div><h3>XP & levels</h3><p>Saved drives earn XP for distance, height traveled and roads new to you. Every 500 XP adds a level.</p></div></div>
         <div><Trophy size={21} /><div><h3>Choose what to compare</h3><p>Switch between XP, distance, height traveled and captured territory. Only drives shared after joining count on the community board.</p></div></div>
-        <div><Flag size={21} /><div><h3>Capture road sections</h3><p>Each drive adds one vote per road section, per day. The most votes wins; ties leave no owner. Loops within one drive add no extra votes. Untouched roads keep their owner.</p></div></div>
+        <div><Flag size={21} /><div><h3>Capture road sections</h3><p>The Territory map shows today’s live road contests and current owners. Each drive adds one vote per section per day; loops in one drive add no extra votes. Votes reset daily, so one visit can take a road from an inactive owner. Ties leave no owner; untouched roads keep theirs.</p></div></div>
         <div><Clock3 size={21} /><div><h3>Results the next morning</h3><p>Rounds close at midnight Israel time. Ownership becomes final around 09:05 the next morning, allowing time for uploads.</p></div></div>
       </div>
       <p className="leaderboard-guide-note">Play around your everyday journeys. Check scores and game controls after parking.</p>

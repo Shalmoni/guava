@@ -3,6 +3,7 @@ import { israelDay } from './territory';
 import { supabase } from './supabase';
 import { CloudUploadError, uploadError } from './cloudErrors';
 export { CloudUploadError } from './cloudErrors';
+export { cloudTerritoryLayers } from './territoryLayers';
 
 export type CloudScore = {
   user_id: string;
@@ -22,10 +23,13 @@ export type CloudRoad = {
   traversal_count: number;
   unique_drivers: number;
   contested: boolean;
+  active_contest: boolean;
+  vote_round_date: string | null;
+  player_count: number | null;
   top_score: number | null;
   your_score: number | null;
 };
-export type CloudProfile = { user_id: string; display_name: string; community_opt_in: boolean; live_territory_consent_at: string | null; territory_detail_consent_at: string | null };
+export type CloudProfile = { user_id: string; display_name: string; community_opt_in: boolean; live_territory_consent_at: string | null; territory_detail_consent_at: string | null; open_territory_consent_at: string | null };
 export type CloudDrive = {
   id: string;
   started_at: string;
@@ -68,9 +72,13 @@ export async function loadCloudGame(viewerId: string, hasDetailsConsent: boolean
   }
   const enrichedRoads = visibleRoads.map(road => {
     const vote = voteByUnit.get(road.id);
+    const activeContest = Boolean(vote && (vote.round_date === today || road.decided_on !== vote.round_date));
     return {
       ...road,
-      contested: Boolean(road.owner_id === null && road.decided_on) || Boolean(vote?.round_date === today && vote.player_count > 1),
+      contested: activeContest || Boolean(road.owner_id === null && road.decided_on),
+      active_contest: activeContest,
+      vote_round_date: vote?.round_date ?? null,
+      player_count: vote?.player_count ?? null,
       top_score: vote?.top_score ?? null,
       your_score: vote?.your_score ?? null,
     };
@@ -128,23 +136,6 @@ export function cloudRankings(game: CloudGame, metric: 'XP' | 'Distance' | 'Heig
     value: metric === 'XP' ? score.xp : metric === 'Distance' ? score.distance_m
       : metric === 'Height' ? score.height_m : score.territory_m,
   })).sort((a, b) => b.value - a.value || a.name.localeCompare(b.name));
-}
-
-export function cloudTerritoryLayers(game: CloudGame, me: string) {
-  const optedIn = new Set(game.profiles.filter(profile => profile.community_opt_in).map(profile => profile.user_id));
-  const layers: Record<string, { color: string; lines: Point[][]; unitIds: string[]; stretchMeters: number[]; width: number }> = {};
-  for (const road of game.roads) {
-    if (!Array.isArray(road.line) || road.line.length < 2) continue;
-    if (!road.contested && (!road.owner_id || !optedIn.has(road.owner_id))) continue;
-    const ownerId = road.contested ? 'contested' : road.owner_id!;
-    const layer = layers[ownerId] ||= {
-      color: ownerId === 'contested' ? '#d7dadd' : ownerId === me ? '#f18ca0' : '#484d53', lines: [], unitIds: [], stretchMeters: [], width: 9,
-    };
-    layer.lines.push(road.line);
-    layer.unitIds.push(road.id);
-    layer.stretchMeters.push(road.length_m);
-  }
-  return layers;
 }
 
 export function cloudPulseLayers(game: CloudGame) {

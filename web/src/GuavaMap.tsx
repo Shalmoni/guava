@@ -153,7 +153,7 @@ function syncMap(map: maplibregl.Map, props: Props) {
   }
   const saved = props.trips.flatMap(trip => drivePointSegments(trip.points).map(segment => segment.map(point => point.position)));
   const live = drivePointSegments(props.livePoints).map(segment => segment.map(point => point.position));
-  // Saved GPS is private. Territory paints only settled, public ownership.
+  // Saved GPS is private. Territory paints captured roads and consented live contests.
   ensureLine(map, 'guava-territory', [], '#f18ca0', 9, 0.72);
   const liveIds = new Set(Object.keys(props.liveTerritory || {}).map(id => `guava-owned-${id}`));
   for (const layer of map.getStyle().layers.filter(item => item.id.startsWith('guava-owned-'))) {

@@ -30,10 +30,11 @@ Deno.serve(async (request: Request) => {
     if (body.ownerId !== identity.user.id) return reply(403, { error: 'This drive belongs to a different account' });
     const admin = createClient(url, service, { auth: { persistSession: false } });
     const { data: profile, error: profileError } = await admin.from('guava_profiles')
-      .select('community_opt_in,territory_detail_consent_at').eq('user_id', identity.user.id).single();
+      .select('community_opt_in,territory_detail_consent_at,open_territory_consent_at').eq('user_id', identity.user.id).single();
     if (profileError) return reply(503, { error: 'Could not check community settings. Try again.' });
     if (!profile?.community_opt_in) return reply(403, { error: 'Turn on community play in Settings before sharing a drive' });
     if (!profile.territory_detail_consent_at) return reply(403, { error: 'Review the updated territory sharing notice in Guava first' });
+    if (!profile.open_territory_consent_at) return reply(403, { error: 'Accept live contest visibility in Guava before sharing a drive' });
     if (typeof body.id !== 'string' || !UUID_PATTERN.test(body.id)
         || !Array.isArray(body.points) || body.points.length < 2 || body.points.length > MAX_DRIVE_POINTS
         || !body.points.every(validFix)

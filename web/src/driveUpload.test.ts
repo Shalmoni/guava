@@ -69,14 +69,14 @@ test('upload errors distinguish recoverable outages from validation and consent'
   assert.equal((await uploadError({ message: 'network' })).retryable, true);
 });
 
-function endpoint(name: string, options: { existing?: { user_id: string; xp: number; distance_m: number; height_m: number }; fetcher?: typeof fetch; sharing?: boolean } = {}) {
+function endpoint(name: string, options: { existing?: { user_id: string; xp: number; distance_m: number; height_m: number }; fetcher?: typeof fetch; sharing?: boolean; openConsent?: boolean } = {}) {
   let handler: (request: Request) => Promise<Response> = () => { throw new Error('No handler'); };
   let rpcCalls = 0;
   const createClient = (_url: string, key: string) => key === 'anon' ? {
     auth: { getUser: async () => ({ data: { user: { id: owner } }, error: null }) },
   } : {
     from: (table: string) => ({ select: () => ({ eq: () => ({
-      single: async () => ({ data: table === 'guava_profiles' ? { community_opt_in: options.sharing ?? true, territory_detail_consent_at: '2026-01-01' } : null, error: null }),
+      single: async () => ({ data: table === 'guava_profiles' ? { community_opt_in: options.sharing ?? true, territory_detail_consent_at: '2026-01-01', open_territory_consent_at: options.openConsent === false ? null : '2026-01-01' } : null, error: null }),
       maybeSingle: async () => ({ data: options.existing || null, error: null }),
     }) }) }),
     rpc: async (_name: string, params: Record<string, unknown>) => {
@@ -111,6 +111,7 @@ test('server rejects wrong owner, excessive point count, expired and disabled up
   assert.equal((await api.invoke(bodyFor(fixes(20, Date.now() - 8 * 86400_000)))).status, 400);
   assert.equal(api.rpcCalls(), 0);
   assert.equal((await endpoint('submit-drive', { sharing: false }).invoke(bodyFor(fixes(20)))).status, 403);
+  assert.equal((await endpoint('submit-drive', { openConsent: false }).invoke(bodyFor(fixes(20)))).status, 403);
 });
 
 test('idempotent receipt recovery returns original metrics without matching or age expiry', async () => {

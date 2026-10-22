@@ -12,7 +12,7 @@ import {
 import type { DrivePoint, DrivingRoute, MapView, Point, Trip } from './model';
 import { isSupabaseConfigured, signInWithGoogle, supabase } from './supabase';
 import { bankTerritorySegment, cloudPulseLayers, cloudRankings, cloudTerritoryLayers, loadCloudGame, uploadCommunityDrive, type CloudGame, type CloudProfile } from './cloud';
-import { connectedTerritory, israelRoundRemaining, territoryAge } from './territory';
+import { connectedTerritory, israelDay, israelRoundRemaining, territoryAge } from './territory';
 import { shownAltitude, trustedGpsAltitude, type TerrainSample } from './altitude';
 import type { User } from '@supabase/supabase-js';
 import { loadTrips, saveTrips, loadDraft, saveDraft, exportAccountData } from './driveDatabase';
@@ -279,7 +279,7 @@ export default function App({ authUser, guestMode, guestName, onGuestNameChange,
         return;
       }
       const { data, error: readError } = await client.from('guava_profiles')
-        .select('user_id,display_name,community_opt_in,live_territory_consent_at,territory_detail_consent_at').eq('user_id', userId).single();
+        .select('user_id,display_name,community_opt_in,live_territory_consent_at,territory_detail_consent_at,open_territory_consent_at').eq('user_id', userId).single();
       if (!alive) return;
       if (readError) { setProfileLoadError(`Could not load your profile: ${readError.message}`); return; }
       const profile = data as CloudProfile;
@@ -299,7 +299,7 @@ export default function App({ authUser, guestMode, guestName, onGuestNameChange,
     let active = true;
     const refresh = async () => {
       try {
-        const game = await loadCloudGame(authUser.id, Boolean(cloudProfile?.territory_detail_consent_at));
+        const game = await loadCloudGame(authUser.id, Boolean(cloudProfile?.territory_detail_consent_at && cloudProfile.open_territory_consent_at));
         if (active) { setCloudGame(game); setCloudError(''); }
       } catch (cause) {
         if (active) setCloudError(cause instanceof Error ? cause.message : 'Community data is unavailable.');
@@ -310,7 +310,7 @@ export default function App({ authUser, guestMode, guestName, onGuestNameChange,
     const visible = () => { if (!document.hidden) void refresh(); };
     document.addEventListener('visibilitychange', visible);
     return () => { active = false; window.clearInterval(timer); document.removeEventListener('visibilitychange', visible); };
-  }, [authUser?.id, cloudProfile?.territory_detail_consent_at]);
+  }, [authUser?.id, cloudProfile?.territory_detail_consent_at, cloudProfile?.open_territory_consent_at]);
 
   useEffect(() => {
     if (!authUser || !sharingEnabled || profileBusy || !navigator.onLine || !storageReady || !hasWriteLock) return;
@@ -341,7 +341,7 @@ export default function App({ authUser, guestMode, guestName, onGuestNameChange,
   }, [ownerId, sharingEnabled, profileBusy, storageReady, hasWriteLock, trips, queueTick]);
 
   useEffect(() => {
-    if (!driving || !live?.share || !authUser || !cloudProfile?.community_opt_in || !cloudProfile.live_territory_consent_at || !cloudProfile.territory_detail_consent_at) return;
+    if (!driving || !live?.share || !authUser || !cloudProfile?.community_opt_in || !cloudProfile.live_territory_consent_at || !cloudProfile.territory_detail_consent_at || !cloudProfile.open_territory_consent_at) return;
     const timer = window.setInterval(() => {
       const current = driveRef.current;
       const checkpoint = territoryCheckpointRef.current;
@@ -361,7 +361,7 @@ export default function App({ authUser, guestMode, guestName, onGuestNameChange,
         .finally(() => { checkpoint.busy = false; });
     }, 15000);
     return () => window.clearInterval(timer);
-  }, [driving, live?.id, live?.share, authUser?.id, cloudProfile?.community_opt_in, cloudProfile?.live_territory_consent_at, cloudProfile?.territory_detail_consent_at]);
+  }, [driving, live?.id, live?.share, authUser?.id, cloudProfile?.community_opt_in, cloudProfile?.live_territory_consent_at, cloudProfile?.territory_detail_consent_at, cloudProfile?.open_territory_consent_at]);
 
   useEffect(() => {
     if (authUser && cloudProfile && !cloudProfile.community_opt_in) setShowWelcome(preference(`guava.welcome.${authUser.id}`) !== 'done');
@@ -642,9 +642,9 @@ export default function App({ authUser, guestMode, guestName, onGuestNameChange,
     catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not save your guest username.'); }
   }
 
-  async function saveCloudProfile(nextOptIn = draftOptIn): Promise<boolean> {
+  async function saveCloudProfile(nextOptIn = draftOptIn, acceptOpenTerritory = false): Promise<boolean> {
     if (!supabase || !authUser || !cloudProfile || !mountedRef.current || !lockOwnedRef.current || profileSavingRef.current) return false;
-    const name = profileName.trim();
+    const name = profileName.trim() || (acceptOpenTerritory ? cloudProfile.display_name : '');
     if (!name || name.length > 32) { setError('Choose a name between 1 and 32 characters.'); return false; }
     if (communityOptIn && !nextOptIn && !window.confirm('Leave community play? This removes your shared scores, drives and captured roads. Drives saved in this browser remain here.')) {
       setDraftOptIn(communityOptIn); return false;
@@ -660,8 +660,9 @@ export default function App({ authUser, guestMode, guestName, onGuestNameChange,
       const { data, error: profileError } = await supabase.from('guava_profiles')
         .update({ display_name: name, community_opt_in: nextOptIn,
           live_territory_consent_at: nextOptIn ? cloudProfile.live_territory_consent_at || new Date().toISOString() : null,
-          territory_detail_consent_at: nextOptIn ? cloudProfile.territory_detail_consent_at || new Date().toISOString() : null })
-        .eq('user_id', authUser.id).select('user_id,display_name,community_opt_in,live_territory_consent_at,territory_detail_consent_at').single();
+          territory_detail_consent_at: nextOptIn ? cloudProfile.territory_detail_consent_at || new Date().toISOString() : null,
+          open_territory_consent_at: nextOptIn ? (cloudProfile.open_territory_consent_at || (acceptOpenTerritory ? new Date().toISOString() : null)) : null })
+        .eq('user_id', authUser.id).select('user_id,display_name,community_opt_in,live_territory_consent_at,territory_detail_consent_at,open_territory_consent_at').single();
       if (!mountedRef.current) return false;
       if (profileError) throw profileError;
       setCloudProfile(data as CloudProfile); setDraftOptIn(nextOptIn);
@@ -718,10 +719,11 @@ export default function App({ authUser, guestMode, guestName, onGuestNameChange,
       onOpenLeaderboard={() => { setPanel('leaderboard'); setLeaderboardHelp(true); }} />}
 
     {view === 'Territory' && selectedRoad && !driving && <div className={`territory-inspector ${selectedTerritoryOwner === authUser?.id ? 'is-mine' : ''}`}>
-      <div className="territory-inspector-head"><strong>{selectedRoad.contested ? 'Contested territory' : selectedTerritoryOwner ? 'Captured territory' : 'Unclaimed territory'}</strong><button onClick={() => setSelectedTerritory(null)} aria-label="Close territory details"><X size={17} /></button></div>
+      <div className="territory-inspector-head"><strong>{selectedRoad.active_contest ? 'Live road contest' : selectedRoad.contested ? 'Unclaimed road' : 'Captured territory'}</strong><button onClick={() => setSelectedTerritory(null)} aria-label="Close territory details"><X size={17} /></button></div>
       <b>{connected?.cells || 1} connected road {connected?.cells === 1 ? 'cell' : 'cells'} · {fmtDistance(connected?.meters || selectedRoad.length_m)}</b>
-      {selectedRoad.contested ? <div className="territory-inspector-scores"><span>Top score <strong>{selectedRoad.top_score ?? '—'}</strong></span><span>You <strong>{selectedRoad.your_score ?? '—'}</strong></span></div>
-        : selectedTerritoryOwner ? <small>Captured by {inspectedName} · {territoryAge(selectedRoad.captured_on, now)}</small> : <small>No owner yet</small>}
+      {selectedRoad.active_contest && <small>{selectedRoad.vote_round_date === israelDay(now) ? 'Today’s round is live' : 'Round closed · awaiting settlement'} · {selectedRoad.player_count ?? 0} {selectedRoad.player_count === 1 ? 'driver' : 'drivers'}</small>}
+      {selectedRoad.top_score !== null && <div className="territory-inspector-scores"><span>Top {selectedRoad.vote_round_date === israelDay(now) ? 'today' : 'round'} <strong>{selectedRoad.top_score}</strong></span><span>You <strong>{selectedRoad.your_score ?? 0}</strong></span></div>}
+      <small>{selectedTerritoryOwner ? `Current owner: ${inspectedName} · ${territoryAge(selectedRoad.captured_on, now)}` : 'No owner yet'}{selectedRoad.active_contest ? ' · Ownership updates after settlement' : ''}</small>
     </div>}
 
     {driving && selected && <div className="turn-banner">
@@ -804,18 +806,18 @@ export default function App({ authUser, guestMode, guestName, onGuestNameChange,
         <button className="pink-button sheet-action" disabled={profileBusy || !hasWriteLock || !profileName.trim()} onClick={() => void saveCloudProfile(false).then(saved => { if (saved) setWelcomeStep('community'); })}>{profileBusy ? 'Saving…' : 'Continue'}</button>
       </> : <>
         <p>Drive with the map and explore roads. After this screen, your browser will ask for location so Guava can show where you are and record drives on this device.</p>
-        <div className="welcome-choice"><strong>Join community play?</strong><span>If you join, road segments are sent for matching while you drive so territory visits count immediately. Your completed trip, XP, distance and height are shared when you finish and save. Other players may see your name on roads you capture, settled tied roads, and anonymous live contest counts on already-shared roads. Quiet roads near home or work can reveal your habits. If you stay private, you won’t see other players’ scores or roads.</span></div>
-        <button className="pink-button sheet-action" disabled={profileBusy || !hasWriteLock} onClick={() => void saveCloudProfile(true).then(saved => { if (saved) finishWelcome(); })}>{profileBusy ? 'Joining…' : 'Join community play'}</button>
+        <div className="welcome-choice"><strong>Join community play?</strong><span>If you join, road sections you drive appear on the live Territory map for other players, even when you are the only driver there. Players see anonymous vote counts on each section; captured roads can show your name. Short GPS segments are sent for matching while you drive, and saved trips add shared XP, distance and height. Quiet roads near home or work can reveal your habits. If you stay private, you won’t see other players’ scores or roads.</span></div>
+        <button className="pink-button sheet-action" disabled={profileBusy || !hasWriteLock} onClick={() => void saveCloudProfile(true, true).then(saved => { if (saved) finishWelcome(); })}>{profileBusy ? 'Joining…' : 'Join community play'}</button>
         <button className="subtle-action sheet-action" onClick={finishWelcome}>Not now — keep my drives private</button>
         <small>You can change this later in Profile → Settings. The map needs location permission to navigate; sharing is separate.</small>
       </>}
     </section></div>}
 
-    {!showWelcome && authUser && cloudProfile?.community_opt_in && (!cloudProfile.live_territory_consent_at || !cloudProfile.territory_detail_consent_at) && !dismissedLiveConsent && !driving && <div className="sheet-backdrop welcome-backdrop"><section className="bottom-sheet welcome-sheet" aria-label="Territory sharing has changed">
+    {!showWelcome && authUser && cloudProfile?.community_opt_in && (!cloudProfile.live_territory_consent_at || !cloudProfile.territory_detail_consent_at || !cloudProfile.open_territory_consent_at) && !dismissedLiveConsent && !driving && <div className="sheet-backdrop welcome-backdrop"><section className="bottom-sheet welcome-sheet" aria-label="Territory sharing has changed">
       <div className="sheet-header"><h2>Territory sharing has changed</h2><button onClick={() => setDismissedLiveConsent(true)} aria-label="Not now"><X size={22} /></button></div>
-      <p>Community territory now shows settled tied roads and anonymous contest counts on already-shared roads. It still sends short GPS segments for matching during opted-in drives, while XP, distance and height share only when you save. Roads near home or work can reveal travel habits.</p>
+      <p>Live Territory now shows every road section being played today, even if only one person has driven it. Other players see anonymous vote counts, and captured roads may show your name. Short GPS segments are still sent for road matching during drives; XP, distance and height share when you save. Quiet roads near home or work may reveal your habits.</p>
       <p>Your old progress stays. New drives remain private until you accept this updated sharing.</p>
-      <button className="pink-button sheet-action" disabled={profileBusy} onClick={() => void saveCloudProfile(true).then(saved => { if (saved) setDismissedLiveConsent(true); })}>{profileBusy ? 'Saving…' : 'Accept updated territory sharing'}</button>
+      <button className="pink-button sheet-action" disabled={profileBusy} onClick={() => void saveCloudProfile(true, true).then(saved => { if (saved) setDismissedLiveConsent(true); })}>{profileBusy ? 'Saving…' : 'Accept updated territory sharing'}</button>
       <button className="subtle-action sheet-action" onClick={() => setDismissedLiveConsent(true)}>Not now — new drives stay private</button>
     </section></div>}
 
@@ -824,7 +826,7 @@ export default function App({ authUser, guestMode, guestName, onGuestNameChange,
       <p>Switch views anytime. All map views are free.</p>
       <div className="view-list">{mapViews.map(option => <div key={option} className="view-group"><button className={view === option ? 'active' : ''} onClick={() => { setView(option); setSelectedTerritory(null); setPanel('none'); }}>
         <span className="view-icon">{option === 'Altitude' ? <Mountain /> : option === 'My Roads' || option === 'Road Pulse' ? <Route /> : option === 'Satellite' ? <Layers3 /> : option === 'Dark' ? <Moon /> : option === 'Territory' ? <Flag /> : <MapIcon />}</span>
-        <span><strong>{option}</strong><small>{!communityOptIn && (option === 'Road Pulse' || option === 'Territory') ? guestMode ? 'Sign in with Google to see shared roads' : 'Join community play to see shared roads' : option === 'My Roads' ? 'Your private saved drives on this device' : option === 'Satellite' ? '2025 imagery with road labels' : option === 'Road Pulse' ? 'How often community roads are used' : option === 'Territory' ? 'Captured road sections' : option === 'Altitude' ? 'Elevation colors and current altitude' : option === 'Dark' ? 'Dark everyday road map' : 'Everyday road map'}</small></span>
+        <span><strong>{option}</strong><small>{!communityOptIn && (option === 'Road Pulse' || option === 'Territory') ? guestMode ? 'Sign in with Google to see shared roads' : 'Join community play to see shared roads' : option === 'My Roads' ? 'Your private saved drives on this device' : option === 'Satellite' ? '2025 imagery with road labels' : option === 'Road Pulse' ? 'How often community roads are used' : option === 'Territory' ? 'Captured and live contested road sections' : option === 'Altitude' ? 'Elevation colors and current altitude' : option === 'Dark' ? 'Dark everyday road map' : 'Everyday road map'}</small></span>
         {view === option && <span className="selected-mark">✓</span>}
       </button></div>)}</div>
     </section></div>}
@@ -843,7 +845,7 @@ export default function App({ authUser, guestMode, guestName, onGuestNameChange,
       <div className="stats-grid"><div><Navigation /><small>Total distance</small><strong>{fmtDistance(totalDistance)}</strong></div><div><Timer /><small>Moving time</small><strong>{fmtTime(totalTime / 1000)}</strong></div><div><Mountain /><small>Height traveled</small><strong>{fmtDistance(totalHeight)}</strong></div><div><Flag /><small>Road explored*</small><strong>{fmtDistance(totalUnits * 25)}</strong></div></div>
       <h3>Personal insights</h3><div className="stats-grid"><div><Navigation /><small>Average moving speed</small><strong>{totalTime > 0 ? `${Math.round(totalDistance / (totalTime / 1000) * 3.6)} km/h` : '—'}</strong></div><div><Mountain /><small>Highest altitude</small><strong>{Number.isFinite(highestAltitude) ? `${Math.round(highestAltitude)} m` : '—'}</strong></div></div>
       <h3>Recent drives</h3>{trips.length ? trips.slice(0, 8).map(trip => <div className="history-row" key={trip.id}><span><strong>{trip.destination || 'Quick Start'}</strong><small>{new Date(trip.endedAt).toLocaleDateString()} · {fmtDistance(trip.distanceMeters)} · {fmtTime(movingTimeMs(trip.points) / 1000)} moving · {Math.round(trip.heightMeters)} m height · {trip.communityStatus === 'uploaded' ? 'shared' : trip.communityStatus === 'pending' ? 'waiting to share' : trip.communityStatus === 'failed' ? 'saved locally · sharing needs attention' : 'private'}</small></span><span><strong>+{trip.xp} XP</strong>{trip.communityError && <small>{trip.communityError}</small>}{sharingEnabled && (trip.communityStatus === 'pending' || trip.communityStatus === 'failed') && <button disabled={!hasWriteLock} className="text-action" onClick={() => retrySharing(trip.id)}>Retry sharing</button>}</span></div>) : <p className="empty-note">Your finished drives will appear here.</p>}
-      <p className="privacy-note">Full GPS tracks stay in this browser. With community play on, short segments are sent for road matching during a drive so private territory visits count then; completed drives are sent for XP, distance and height when saved. Only road visits and scores are stored for the shared game. Browser recording may stop when locked or backgrounded. *Road explored is a local estimate.</p></div>
+      <p className="privacy-note">Full GPS tracks stay in this browser. With community play on, short segments are sent for road matching during a drive so live road contests update then; completed drives are sent for XP, distance and height when saved. Other players can see active road sections. Browser recording may stop when locked or backgrounded. *Road explored is a local estimate.</p></div>
     </div>}
 
     {panel === 'settings' && <div className="full-screen-panel"><div className="full-header"><button onClick={() => setPanel('profile')} aria-label="Back to profile"><ArrowLeft /></button><h2>Settings</h2><span /></div><div className="profile-body">
@@ -851,7 +853,7 @@ export default function App({ authUser, guestMode, guestName, onGuestNameChange,
       {authUser ? <><p className="empty-note">Signed in as {authUser.email}. Drive tracks are saved in this browser.</p>
         <label className="settings-label community-toggle">Join community play <input type="checkbox" checked={draftOptIn} disabled={!cloudProfile || profileBusy || !hasWriteLock} onChange={event => setDraftOptIn(event.target.checked)} /></label>
         <p className="settings-status" role="status">Active sharing: <strong>{sharingEnabled ? 'on' : 'off'}</strong>. {draftOptIn !== communityOptIn ? 'Unsaved change — Save profile to apply it.' : ''}</p>
-        <p className="privacy-note">When on, short GPS segments are sent for road matching during a drive so territory visits count immediately, even if the drive ends after midnight. A completed trip adds shared XP, distance and height only when saved. Other participating drivers can see your name on roads you capture after the daily round, settled tied roads, and anonymous contest counts on already-shared roads. Quiet roads may reveal where you travel, including near home or work. Turning this off deletes cloud game progress, but keeps local drives in this browser.</p>
+        <p className="privacy-note">When on, short GPS segments are sent for road matching during a drive. Road sections you visit appear on other players’ live Territory maps, even if you are the only driver. Other players see anonymous vote counts and your name on roads you capture. Saved trips add shared XP, distance and height. Quiet roads can reveal where you travel. Turning this off deletes cloud game progress, but keeps local drives in this browser.</p>
         <button className="pink-button sheet-action" disabled={!cloudProfile || profileBusy || !hasWriteLock} onClick={() => void saveCloudProfile()}>{profileBusy ? 'Saving…' : 'Save profile'}</button>
         <button className="subtle-action sheet-action" onClick={() => void checkCommunityConnection()}>Check community connection</button>
         {connectionResult && <p className="empty-note" role="status">{connectionResult}</p>}

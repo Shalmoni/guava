@@ -6,10 +6,10 @@ Players can sign in with Google or choose a local-only guest profile with a user
 
 ## Rules
 
-- Territory live sync begins only after at least 50 m of accepted driving. Its authenticated `record-territory` function validates movement and map-matches short segments via OSRM; private visits are banked while driving. They remain counted even if the driver later discards the trip record. Full raw GPS traces are not stored in the hosted database.
+- Territory live sync begins only after at least 50 m of accepted driving and fresh consent to live contest visibility. Its authenticated `record-territory` function validates movement and map-matches short segments via OSRM; road-section visits appear to other consenting community players while driving. They remain counted even if the driver later discards the trip record. Full raw GPS traces are not stored in the hosted database.
 - The authenticated `submit-drive` function validates the complete drive, map-matches sampled coordinates, fills eligible missed road visits, and writes the summary plus XP/distance/height only after Finish & Save. Saved community drives can retry for up to seven days. Uploads after the next morning's 09:05 Israel-time deadline can still add lifetime scores and Road Pulse usage, but never change settled territory ownership.
 - Each session contributes at most one vote per road cell per Israel-calendar day, regardless of loops or travel direction. The daily contest closes at local midnight; ownership becomes final at about 09:05 Israel time the following morning to admit late uploads. The unique top driver wins; ties clear ownership; untouched cells keep their owner.
-- Territory paints only captured road sections. A tap identifies the owner and approximate section length. Road Pulse shows community roads only after three distinct opted-in drivers have used them. Names are displayed only for participants.
+- Territory paints captured road sections and live contests, including a one-driver unclaimed road. A tap shows the current owner, top vote count, your vote count and number of participating drivers. Road Pulse shows community roads only after three distinct opted-in drivers have used them. Names are displayed only for participants.
 - The leaderboard and territory map show real opted-in community data.
 - The map picker has seven views: Regular, Dark, Satellite, My Roads, Territory, Road Pulse, and Altitude. My Roads draws only saved drives from this device; it works without community play. Satellite combines 2025 Sentinel-2 imagery with road labels.
 - Turning community play off deletes that player's shared drive summaries, scores, live visits and ownership; local browser drives remain.
@@ -42,7 +42,7 @@ The hosted Guava Supabase project is separate from other products. `supabase/mig
 ## Release verification
 
 Follow [backend validation and release order](supabase/tests/README.md) before
-merging this release to `main`: apply the database migration and deploy both
+merging this release to `main`: apply the database migration and deploy all three
 updated functions before the matching web build. CI validates the web and isolated
 database tests but does not deploy Supabase. The [synthetic browser fixture](web/qa/README.md)
 exercises drive recovery without device GPS or cloud writes.

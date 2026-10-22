@@ -26,16 +26,16 @@ export default function MapContext({
   else if (unavailable) message = hasRoads ? 'Showing the last available community roads. Trying to reconnect.' : 'Community roads are unavailable right now. Your local drive history is still available.';
   else if (isLoading) message = 'Loading community roads…';
   else if (!hasRoads) message = view === 'Territory'
-    ? 'No captured roads yet. Ownership becomes final around 09:05 Israel time the next morning.'
+    ? 'No live contests or captured roads yet. Shared drives appear here as their road visits sync.'
     : 'Roads appear after at least three participating drivers have used them.';
 
   return <aside className="map-context" aria-label={`${title} information`}>
     <div className="map-context-heading">{view === 'Territory' ? <Flag size={16} /> : <Route size={16} />}<strong>{title}</strong></div>
     {message && <p>{message}</p>}
-    {isCommunity && !isLoading && view === 'Territory' && hasRoads && <div className="territory-legend" aria-label="Pink: yours. Dark: other drivers. Outlined gray: contested.">
-      <span><i className="legend-mine" />You</span>
-      <span><i className="legend-others" />Others</span>
-      <span><i className="legend-contested" />Contested</span>
+    {isCommunity && !isLoading && view === 'Territory' && hasRoads && <div className="territory-legend" aria-label="Pink: yours. Dark: another driver. Outlined gray: live contest or unclaimed.">
+      <span><i className="legend-mine" />Yours</span>
+      <span><i className="legend-others" />Another player</span>
+      <span><i className="legend-contested" />Live / unclaimed</span>
     </div>}
     {isCommunity && !isLoading && view === 'Road Pulse' && !mine && <div className="pulse-legend">
       <div><span>Less use</span><i aria-hidden="true" /><span>More use</span></div>

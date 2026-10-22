@@ -11,6 +11,7 @@ const migrations = [
   '20261018085926_live_territory_visits.sql', '20261018090209_preserve_new_road_xp.sql',
   '20261020100432_territory_card_and_round_state.sql', '20261020101229_territory_detail_consent.sql',
   '20261020101442_hide_depleted_tied_roads.sql', '20261020141615_reliable_saved_drives.sql',
+  '20261022135441_live_territory_contests.sql',
 ];
 const owner = '11111111-1111-4111-8111-111111111111';
 const other = '22222222-2222-4222-8222-222222222222';
@@ -37,8 +38,8 @@ async function database() {
   }
   await db.exec(`grant all on all tables in schema public to service_role;
     insert into auth.users values ('${owner}'), ('${other}');
-    insert into guava_profiles(user_id,display_name,community_opt_in,live_territory_consent_at,territory_detail_consent_at)
-    values ('${owner}','One',true,now(),now()), ('${other}','Two',true,now(),now());`);
+    insert into guava_profiles(user_id,display_name,community_opt_in,live_territory_consent_at,territory_detail_consent_at,open_territory_consent_at)
+    values ('${owner}','One',true,now(),now(),now()), ('${other}','Two',true,now(),now(),now());`);
   return db;
 }
 
@@ -107,5 +108,57 @@ test('saved-drive SQL: long traces, late retries, ownership, idempotency and con
       assert.equal(permissions.length, 4);
       assert.ok(permissions.every(fn => !fn.prosecdef && !fn.browser_exec));
     });
+  } finally { await db.close(); }
+});
+
+test('live contests reveal consented single-driver roads and daily votes reset', async () => {
+  const db = await database();
+  try {
+    const now = new Date().toISOString();
+    const roadId = 'h:999:0';
+    await db.query(`select public.guava_record_live_units($1,$2,$3::timestamptz - interval '1 minute',$3,$4)`,
+      [tripId(20), owner, now, JSON.stringify(units(1, now, 'h:999:'))]);
+    const score = (await db.query('select top_score, player_count, your_score from public.guava_territory_public_scores($1,$2)',
+      [owner, [roadId]])).rows[0];
+    assert.deepEqual(score, { top_score: 1, player_count: 1, your_score: 1 });
+    await db.query("select set_config('request.jwt.claim.sub', $1, false)", [other]);
+    await db.exec('set role authenticated');
+    assert.equal((await db.query('select count(*)::integer as n from public.guava_road_units where id=$1', [roadId])).rows[0].n, 1);
+    await db.exec('reset role');
+    await db.query('update public.guava_profiles set open_territory_consent_at=null where user_id=$1', [owner]);
+    await db.exec('set role authenticated');
+    assert.equal((await db.query('select count(*)::integer as n from public.guava_road_units where id=$1', [roadId])).rows[0].n, 0);
+    await db.exec('reset role');
+    await assert.rejects(db.query(`select public.guava_record_live_units($1,$2,$3::timestamptz - interval '1 minute',$3,$4)`,
+      [tripId(21), owner, now, JSON.stringify(units(1, now, 'h:998:'))]), /consent/);
+
+    const dates = (await db.query(`select
+      ((now() at time zone 'Asia/Jerusalem')::date - 4)::text as first,
+      ((now() at time zone 'Asia/Jerusalem')::date - 3)::text as second,
+      ((now() at time zone 'Asia/Jerusalem')::date - 2)::text as third`)).rows[0];
+    await db.query('update public.guava_profiles set open_territory_consent_at=now() where user_id=$1', [owner]);
+    await db.query(`select public.guava_record_live_units($1,$2,$3::timestamptz - interval '1 minute',$3,$4)`,
+      [tripId(22), owner, now, JSON.stringify(units(1, now, 'h:999:'))]);
+    await db.query(`select public.guava_record_live_units($1,$2,$3::timestamptz - interval '1 minute',$3,$4)`,
+      [tripId(23), other, now, JSON.stringify(units(1, now, 'h:999:'))]);
+    assert.deepEqual((await db.query('select top_score, player_count, your_score from public.guava_territory_public_scores($1,$2)',
+      [owner, [roadId]])).rows[0], { top_score: 2, player_count: 2, your_score: 2 });
+    await db.query("insert into public.guava_road_units(id,line,length_m) values ('h:1000:0','[[35,32],[35.0001,32.0001]]',25)");
+    const vote = async (session, who, day) => {
+      const observed = `${day}T12:00:00Z`;
+      await db.query('insert into public.guava_live_sessions(id,user_id,started_at,last_at) values ($1,$2,$3,$3)', [session, who, observed]);
+      await db.query('insert into public.guava_live_unit_visits(session_id,unit_id,user_id,round_date,observed_at) values ($1,$2,$3,$4,$5)',
+        [session, 'h:1000:0', who, day, observed]);
+    };
+    await vote(tripId(30), owner, dates.first);
+    await db.query('select public.guava_settle_round($1)', [dates.first]);
+    assert.equal((await db.query("select owner_id from public.guava_road_units where id='h:1000:0'")).rows[0].owner_id, owner);
+    await vote(tripId(31), other, dates.second);
+    await db.query('select public.guava_settle_round($1)', [dates.second]);
+    assert.equal((await db.query("select owner_id from public.guava_road_units where id='h:1000:0'")).rows[0].owner_id, other);
+    await vote(tripId(32), owner, dates.third);
+    await vote(tripId(33), other, dates.third);
+    await db.query('select public.guava_settle_round($1)', [dates.third]);
+    assert.equal((await db.query("select owner_id from public.guava_road_units where id='h:1000:0'")).rows[0].owner_id, null);
   } finally { await db.close(); }
 });
