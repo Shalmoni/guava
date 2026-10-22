@@ -167,14 +167,15 @@ function syncMap(map: maplibregl.Map, props: Props) {
       selected === id ? 12 : layer.width, selected && selected !== id ? .3 : .92,
       index => ({ unitId: layer.unitIds[index] || '', ownerId: id, stretchMeters: String(layer.stretchMeters[index] || 0) }));
   }
-  ensureLine(map, 'guava-live', props.view === 'Territory' && !props.routes.length ? live : [], '#f4a7bb', 7, 0.86);
   ensureLine(map, 'guava-my-roads', props.view === 'My Roads' ? saved : [], '#d35377', 7, 0.82);
   for (let index = 0; index < 4; index++) {
     const layer = props.livePulse?.[index];
     ensureLine(map, `guava-pulse-${index}`, props.view === 'Road Pulse' ? layer?.lines || [] : [], layer?.color || '#edc7c8', layer?.width || 6, .85);
   }
-  ensureLine(map, 'guava-alternatives', props.routes.filter((_, index) => index !== props.selectedRoute).map(route => route.coordinates), '#919aa5', 5, 0.75);
   const selected = props.routes[props.selectedRoute];
+  // Quick Drive shows only the GPS track already recorded, on every map view.
+  ensureLine(map, 'guava-live', props.isDriving && !selected ? live : [], '#f8b6c6', 7, 0.98);
+  ensureLine(map, 'guava-alternatives', props.routes.filter((_, index) => index !== props.selectedRoute).map(route => route.coordinates), '#919aa5', 5, 0.75);
   ensureLine(map, 'guava-route', selected ? [selected.coordinates] : [], '#ee668b', 7, 0.96);
   const snap = props.isDriving && props.position && selected ? snapToRoute(props.position, selected.coordinates) : null;
   ensureLine(map, 'guava-driven-route', selected && props.isDriving ? [traversedRoute(selected.coordinates, snap)] : [], '#f8b6c6', 7, 0.98);
