@@ -11,6 +11,7 @@
     <summary>Synthetic GPS controls (local QA only)</summary>
     <button id="move">Move 47 m</button>
     <button id="gap">GPS gap + 565 m</button>
+    <button id="park">Park for 15 min</button>
     <button id="deny">Deny GPS</button>
     <button id="restore">Restore GPS</button>
     <button id="older">Advance 8 hours</button>
@@ -57,6 +58,7 @@
     }
     document.querySelector('#move').onclick = () => move(47, 3);
     document.querySelector('#gap').onclick = () => move(565, 40);
+    document.querySelector('#park').onclick = () => move(0, 901);
     document.querySelector('#deny').onclick = () => { denied = true; emit(); };
     document.querySelector('#restore').onclick = () => { denied = false; emit(); };
     document.querySelector('#older').onclick = () => move(0, 28800);

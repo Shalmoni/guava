@@ -15,6 +15,8 @@ Checks:
 
 1. Quick Start, move twice, inject a GPS gap, move again. Only the three observed
    movements should count; the gap should not draw a connecting line.
+   Park for 15 minutes after at least 50 m. The drive should auto-save, and
+   moving time should exclude the parked interval.
 2. Reload while recording. Resume should recover distance and start a new segment.
 3. Save. The recap and Profile should contain the drive after another reload.
 4. Open a second tab. It should be read-only. Close the original and retry the

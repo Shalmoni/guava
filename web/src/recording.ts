@@ -16,6 +16,63 @@ const MAX_FIX_AGE_MS = 15_000;
 const MAX_FUTURE_FIX_MS = 5_000;
 const MAX_SEGMENT_GAP_MS = 30_000;
 const MAX_SEGMENT_DISTANCE_METERS = 300;
+const MIN_MOTION_METERS = 20;
+const AUTO_FINISH_IDLE_MS = 15 * 60_000;
+
+export type MotionState = {
+  driveId: string;
+  anchor: DrivePoint;
+  lastFix: DrivePoint;
+  lastMovementAt: number;
+};
+
+function meaningfulMovement(from: DrivePoint, to: DrivePoint): number {
+  const distance = distanceMeters(from.position, to.position);
+  return distance >= Math.max(MIN_MOTION_METERS, (from.accuracy ?? 10) + (to.accuracy ?? 10)) ? distance : 0;
+}
+
+export function movingTimeMs(points: DrivePoint[]): number {
+  let time = 0;
+  let anchor: DrivePoint | null = null;
+  for (const point of points) {
+    if (!anchor || point.segmentStart || point.timestamp - anchor.timestamp > MAX_SEGMENT_GAP_MS) {
+      anchor = point;
+      continue;
+    }
+    const distance = meaningfulMovement(anchor, point);
+    if (distance) {
+      // A stop followed by one movement fix cannot turn the whole pause into drive time.
+      time += Math.min(point.timestamp - anchor.timestamp, distance * 1000);
+      anchor = point;
+    }
+  }
+  return time;
+}
+
+export function startMotionState(driveId: string, fix: DrivePoint): MotionState {
+  return { driveId, anchor: fix, lastFix: fix, lastMovementAt: fix.timestamp };
+}
+
+export function advanceMotionState(state: MotionState, fix: DrivePoint): MotionState {
+  if (fix.timestamp <= state.lastFix.timestamp) return state;
+  if (meaningfulMovement(state.anchor, fix)) {
+    return { ...state, anchor: fix, lastFix: fix, lastMovementAt: fix.timestamp };
+  }
+  return { ...state, lastFix: fix };
+}
+
+export function stationaryDurationMs(drive: ActiveDrive, state: MotionState | null, now: number): number | null {
+  if (!state || state.driveId !== drive.id || drive.distance < 50
+    || now < state.lastFix.timestamp || now - state.lastFix.timestamp > 20_000
+    || state.anchor.accuracy == null || state.anchor.accuracy > 20
+    || state.lastFix.accuracy == null || state.lastFix.accuracy > 20
+    || distanceMeters(state.anchor.position, state.lastFix.position) > MIN_MOTION_METERS) return null;
+  return Math.max(0, now - state.lastMovementAt);
+}
+
+export function canAutoFinishDrive(drive: ActiveDrive, state: MotionState | null, now: number): boolean {
+  return (stationaryDurationMs(drive, state, now) ?? 0) >= AUTO_FINISH_IDLE_MS;
+}
 
 export function isUsableDriveFix(sample: DrivePoint, now = Date.now()): boolean {
   return Array.isArray(sample.position) && sample.position.length === 2

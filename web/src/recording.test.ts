@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { appendDriveFix, isUsableDriveFix, type ActiveDrive } from './recording';
+import { advanceMotionState, appendDriveFix, canAutoFinishDrive, isUsableDriveFix, movingTimeMs, startMotionState, type ActiveDrive } from './recording';
 import { distanceMeters, drivePointSegments, finishTrip, roadUnit, tripUnits, type DrivePoint } from './model';
 
 const startTime = 1_700_000_000_000;
@@ -27,6 +27,25 @@ test('recording recovers after a >300 m gap without crediting or drawing the mis
   assert.ok(Math.abs(resumed.distance - first.distance * 2) < 0.01);
   assert.deepEqual(drivePointSegments(resumed.points).map(segment => segment.length), [2, 2]);
   assert.equal(tripUnits(resumed.points).has(roadUnit([35.047, 32.461])), false);
+});
+
+test('moving time excludes a long parked interval and GPS jitter', () => {
+  const at = (metres: number, seconds: number) => fix(35.043 + metres / 94_100, seconds);
+  const points = [at(0, 0), at(30, 10), at(33, 20), at(27, 30), at(31, 40), at(29, 50), at(32, 600), at(62, 610)];
+  assert.equal(movingTimeMs(points), 20_000);
+  assert.equal(movingTimeMs([at(0, 0), at(30, 10), { ...at(500, 610), segmentStart: true }, at(530, 620)]), 20_000);
+});
+
+test('a parked drive auto-finishes only after 15 minutes of fresh, accurate GPS', () => {
+  const at = (metres: number, seconds: number) => fix(35.043 + metres / 94_100, seconds);
+  const active = { ...drive(), distance: 60 };
+  const moved = advanceMotionState(startMotionState(active.id, at(0, 0)), at(30, 10));
+  const parked = advanceMotionState(moved, at(32, 910));
+  assert.equal(canAutoFinishDrive(active, parked, startTime + 910_000), true);
+  assert.equal(canAutoFinishDrive(active, moved, startTime + 910_000), false);
+  assert.equal(canAutoFinishDrive({ ...active, distance: 40 }, parked, startTime + 910_000), false);
+  assert.equal(canAutoFinishDrive(active, advanceMotionState(moved, { ...at(32, 910), accuracy: 30 }), startTime + 910_000), false);
+  assert.equal(canAutoFinishDrive(active, advanceMotionState(parked, at(62, 911)), startTime + 911_000), false);
 });
 
 test('a long GPS pause starts a new segment even if its endpoints are close', () => {

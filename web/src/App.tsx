@@ -17,7 +17,7 @@ import { shownAltitude, trustedGpsAltitude, type TerrainSample } from './altitud
 import type { User } from '@supabase/supabase-js';
 import { loadTrips, saveTrips, loadDraft, saveDraft, exportAccountData } from './driveDatabase';
 import { hasLegacyTrips, exportLegacyTrips } from './storage';
-import { appendDriveFix, isUsableDriveFix, type ActiveDrive } from './recording';
+import { advanceMotionState, appendDriveFix, canAutoFinishDrive, isUsableDriveFix, movingTimeMs, startMotionState, stationaryDurationMs, type ActiveDrive, type MotionState } from './recording';
 import { preference, setPreference } from './preferences';
 import { canShare, retryDelay, uploadReady } from './sharing';
 import { routeProgress } from './navigation';
@@ -119,6 +119,8 @@ export default function App({ authUser, guestMode, guestName, onGuestNameChange,
   const draftWriteQueueRef = useRef<Promise<boolean>>(Promise.resolve(true));
   const tripWriteQueueRef = useRef<Promise<boolean>>(Promise.resolve(true));
   const lastFixRef = useRef<DrivePoint | null>(null);
+  const motionStateRef = useRef<MotionState | null>(null);
+  const autoFinishAttemptRef = useRef<string | null>(null);
   const resumeBreakRef = useRef(false);
   const tripsRef = useRef(trips);
   tripsRef.current = trips;
@@ -388,6 +390,11 @@ export default function App({ authUser, guestMode, guestName, onGuestNameChange,
       const current = driveRef.current;
       if (!current || driveActionRef.current) return;
       const updated = appendDriveFix(current, { ...sample, segmentStart: resumeBreakRef.current || undefined });
+      const motionState = motionStateRef.current?.driveId === current.id
+        ? motionStateRef.current : startMotionState(current.id, current.points.at(-1)!);
+      if (updated !== current || distanceMeters(motionState.anchor.position, sample.position) <= 20) {
+        motionStateRef.current = advanceMotionState(motionState, sample);
+      }
       if (updated === current) return;
       resumeBreakRef.current = false;
       driveRef.current = updated;
@@ -490,6 +497,8 @@ export default function App({ authUser, guestMode, guestName, onGuestNameChange,
     if (!stored) return;
     if (quick) { setRouteOptions([]); setDestination(null); setSearchText(''); }
     driveRef.current = start;
+    motionStateRef.current = startMotionState(start.id, start.points[0]);
+    autoFinishAttemptRef.current = null;
     territoryCheckpointRef.current = { sessionId: start.id, nextIndex: 0, busy: false };
     setTerritorySyncError(''); setLive(start); setDriving(true);
     setDriveMode(!quick && routeOptions.length ? 'Navigation' : 'Game');
@@ -510,6 +519,8 @@ export default function App({ authUser, guestMode, guestName, onGuestNameChange,
     if (!stored) return;
     resumeBreakRef.current = true;
     driveRef.current = resumed;
+    motionStateRef.current = startMotionState(resumed.id, fix);
+    autoFinishAttemptRef.current = null;
     territoryCheckpointRef.current = { sessionId: resumed.id, nextIndex: Math.max(0, resumed.points.length - 1), busy: false };
     setLive(resumed); setRecoverable(null); setDriving(true); setDriveMode('Game'); setPanel('none');
     setCenterCommand(value => value + 1);
@@ -534,11 +545,20 @@ export default function App({ authUser, guestMode, guestName, onGuestNameChange,
     if (!await persistDraft(null) && !save) return;
     if (!mountedRef.current) return;
     driveRef.current = null;
+    motionStateRef.current = null;
     setDriving(false); setLive(null); setRecoverable(null); setPanel(trip ? 'recap' : 'none');
     if (trip) setLastTrip(trip);
     setRouteOptions([]); setDestination(null); setSearchText('');
     } finally { driveActionRef.current = false; if (mountedRef.current) setActionBusy(false); }
   }
+
+  useEffect(() => {
+    const current = driveRef.current;
+    if (!driving || !current || !hasWriteLock || autoFinishAttemptRef.current === current.id
+      || !canAutoFinishDrive(current, motionStateRef.current, now)) return;
+    autoFinishAttemptRef.current = current.id;
+    void endDrive(true);
+  }, [driving, hasWriteLock, lastFixAt, now]);
 
   function clearRoute() {
     routeRequestRef.current?.abort(); setRouting(false);
@@ -576,13 +596,14 @@ export default function App({ authUser, guestMode, guestName, onGuestNameChange,
   const offRoute = Boolean(driving && selected && position && !progress);
   const remaining = progress?.remaining ?? selected?.distance ?? 0;
   const estimatedSeconds = progress?.seconds ?? selected?.duration ?? 0;
-  const driveSeconds = live ? (now - live.startedAt) / 1000 : 0;
+  const driveSeconds = useMemo(() => movingTimeMs(live?.points || []) / 1000, [live?.points]);
   const gpsStale = driving && now - lastFixAt > 20_000;
+  const stationaryDuration = live ? stationaryDurationMs(live, motionStateRef.current, now) : null;
   const { totalDistance, totalHeight, totalXP, totalTime, highestAltitude } = useMemo(() => ({
     totalDistance: trips.reduce((sum, trip) => sum + trip.distanceMeters, 0),
     totalHeight: trips.reduce((sum, trip) => sum + trip.heightMeters, 0),
     totalXP: trips.reduce((sum, trip) => sum + trip.xp, 0),
-    totalTime: trips.reduce((sum, trip) => sum + (trip.endedAt - trip.startedAt), 0),
+    totalTime: trips.reduce((sum, trip) => sum + movingTimeMs(trip.points), 0),
     highestAltitude: trips.reduce((top, trip) => trip.points.reduce((inner, point) => Math.max(inner, point.altitude ?? -Infinity), top), -Infinity),
   }), [trips]);
   const totalUnits = useMemo(() => new Set(trips.flatMap(trip => [...tripUnits(trip.points)])).size, [trips]);
@@ -759,7 +780,7 @@ export default function App({ authUser, guestMode, guestName, onGuestNameChange,
           <div><strong>{offRoute || gpsStale ? '—' : fmtDistance(remaining)}</strong><small>TO GO</small></div>
           <div><strong>{offRoute || gpsStale ? '—' : fmtClock(now + estimatedSeconds * 1000)}</strong><small>ARRIVAL</small></div>
         </> : <>
-          <div><strong>{liveTime(driveSeconds)}</strong><small>DRIVE TIME</small></div>
+          <div><strong>{liveTime(driveSeconds)}</strong><small>MOVING TIME</small></div>
           <div><strong>{fmtDistance(live?.distance || 0)}</strong><small>DISTANCE</small></div>
           <div><strong>{live?.altitudeAnchor == null ? '—' : statValue(live?.height || 0, ' m')}</strong><small>UP + DOWN</small></div>
           <div><strong>{fmtDistance(localRoadUnits * 25)}</strong><small>ROAD EXPLORED*</small></div>
@@ -771,6 +792,7 @@ export default function App({ authUser, guestMode, guestName, onGuestNameChange,
         <button className="dock-map" onClick={() => setPanel('maps')}><Layers3 size={17} /> Map</button>
       </div>
       {gpsStale && <small className="territory-sync-warning">GPS paused. Keep Guava open; missing travel is not counted.</small>}
+      {stationaryDuration != null && stationaryDuration >= 10 * 60_000 && <small className="territory-sync-warning">Still parked? Guava will save this drive after 15 minutes without moving.</small>}
       {territorySyncError && live?.share && <small className="territory-sync-warning">Territory is waiting to sync. Guava will retry while this page is open.</small>}
     </div>}
 
@@ -818,9 +840,9 @@ export default function App({ authUser, guestMode, guestName, onGuestNameChange,
     {panel === 'profile' && <div className="full-screen-panel"><div className="full-header"><button onClick={() => setPanel('none')} aria-label="Close profile"><X /></button><h2>Profile</h2><button onClick={openSettings} aria-label="Settings"><Settings size={20} /></button></div>
       <div className="profile-body"><div className="xp-card"><div className="xp-topline"><small>{communityOptIn ? 'COMMUNITY XP' : 'LOCAL XP'}</small><small>LEVEL {Math.floor(displayXP / 500) + 1}</small></div><strong>{displayXP.toLocaleString()}</strong><div className="xp-track"><span style={{ width: `${displayXP % 500 / 5}%` }} /></div><span>{500 - displayXP % 500} XP to next level</span></div>
       <div className="identity-card"><div className="avatar"><UserRound /></div><div><strong>{cloudProfile?.display_name || profileName}</strong><small>{communityOptIn ? 'Community play on · drives saved on this device' : authUser ? 'Signed in · community play off' : 'Local profile · this browser'}</small></div></div>
-      <div className="stats-grid"><div><Navigation /><small>Total distance</small><strong>{fmtDistance(totalDistance)}</strong></div><div><Timer /><small>Drive time</small><strong>{fmtTime(totalTime / 1000)}</strong></div><div><Mountain /><small>Height traveled</small><strong>{fmtDistance(totalHeight)}</strong></div><div><Flag /><small>Road explored*</small><strong>{fmtDistance(totalUnits * 25)}</strong></div></div>
-      <h3>Personal insights</h3><div className="stats-grid"><div><Navigation /><small>Average speed</small><strong>{totalTime > 0 ? `${Math.round(totalDistance / (totalTime / 1000) * 3.6)} km/h` : '—'}</strong></div><div><Mountain /><small>Highest altitude</small><strong>{Number.isFinite(highestAltitude) ? `${Math.round(highestAltitude)} m` : '—'}</strong></div></div>
-      <h3>Recent drives</h3>{trips.length ? trips.slice(0, 8).map(trip => <div className="history-row" key={trip.id}><span><strong>{trip.destination || 'Quick Start'}</strong><small>{new Date(trip.endedAt).toLocaleDateString()} · {fmtDistance(trip.distanceMeters)} · {fmtTime((trip.endedAt - trip.startedAt) / 1000)} · {Math.round(trip.heightMeters)} m height · {trip.communityStatus === 'uploaded' ? 'shared' : trip.communityStatus === 'pending' ? 'waiting to share' : trip.communityStatus === 'failed' ? 'saved locally · sharing needs attention' : 'private'}</small></span><span><strong>+{trip.xp} XP</strong>{trip.communityError && <small>{trip.communityError}</small>}{sharingEnabled && (trip.communityStatus === 'pending' || trip.communityStatus === 'failed') && <button disabled={!hasWriteLock} className="text-action" onClick={() => retrySharing(trip.id)}>Retry sharing</button>}</span></div>) : <p className="empty-note">Your finished drives will appear here.</p>}
+      <div className="stats-grid"><div><Navigation /><small>Total distance</small><strong>{fmtDistance(totalDistance)}</strong></div><div><Timer /><small>Moving time</small><strong>{fmtTime(totalTime / 1000)}</strong></div><div><Mountain /><small>Height traveled</small><strong>{fmtDistance(totalHeight)}</strong></div><div><Flag /><small>Road explored*</small><strong>{fmtDistance(totalUnits * 25)}</strong></div></div>
+      <h3>Personal insights</h3><div className="stats-grid"><div><Navigation /><small>Average moving speed</small><strong>{totalTime > 0 ? `${Math.round(totalDistance / (totalTime / 1000) * 3.6)} km/h` : '—'}</strong></div><div><Mountain /><small>Highest altitude</small><strong>{Number.isFinite(highestAltitude) ? `${Math.round(highestAltitude)} m` : '—'}</strong></div></div>
+      <h3>Recent drives</h3>{trips.length ? trips.slice(0, 8).map(trip => <div className="history-row" key={trip.id}><span><strong>{trip.destination || 'Quick Start'}</strong><small>{new Date(trip.endedAt).toLocaleDateString()} · {fmtDistance(trip.distanceMeters)} · {fmtTime(movingTimeMs(trip.points) / 1000)} moving · {Math.round(trip.heightMeters)} m height · {trip.communityStatus === 'uploaded' ? 'shared' : trip.communityStatus === 'pending' ? 'waiting to share' : trip.communityStatus === 'failed' ? 'saved locally · sharing needs attention' : 'private'}</small></span><span><strong>+{trip.xp} XP</strong>{trip.communityError && <small>{trip.communityError}</small>}{sharingEnabled && (trip.communityStatus === 'pending' || trip.communityStatus === 'failed') && <button disabled={!hasWriteLock} className="text-action" onClick={() => retrySharing(trip.id)}>Retry sharing</button>}</span></div>) : <p className="empty-note">Your finished drives will appear here.</p>}
       <p className="privacy-note">Full GPS tracks stay in this browser. With community play on, short segments are sent for road matching during a drive so private territory visits count then; completed drives are sent for XP, distance and height when saved. Only road visits and scores are stored for the shared game. Browser recording may stop when locked or backgrounded. *Road explored is a local estimate.</p></div>
     </div>}
 
@@ -862,7 +884,8 @@ export default function App({ authUser, guestMode, guestName, onGuestNameChange,
 
     {panel === 'recap' && lastTrip && <div className="full-screen-panel"><div className="full-header"><button onClick={() => setPanel('none')} aria-label="Close drive recap"><X /></button><h2>Drive complete</h2><Flag size={20} /></div><div className="profile-body">
       <div className="xp-card"><small>YOU EARNED</small><strong>+{lastTrip.xp} XP</strong><span>{lastTrip.destination || 'Quick Start'} · {fmtClock(lastTrip.endedAt)}</span></div>
-      <div className="stats-grid"><div><Navigation /><small>Distance</small><strong>{fmtDistance(lastTrip.distanceMeters)}</strong></div><div><Timer /><small>Time</small><strong>{fmtTime((lastTrip.endedAt - lastTrip.startedAt) / 1000)}</strong></div><div><Mountain /><small>Height</small><strong>{fmtDistance(lastTrip.heightMeters)}</strong></div><div><Flag /><small>New road*</small><strong>{fmtDistance(lastTrip.newRoadUnits * 25)}</strong></div></div>
+      {autoFinishAttemptRef.current === lastTrip.id && <p className="privacy-note">Saved automatically after 15 minutes without movement.</p>}
+      <div className="stats-grid"><div><Navigation /><small>Distance</small><strong>{fmtDistance(lastTrip.distanceMeters)}</strong></div><div><Timer /><small>Moving time</small><strong>{fmtTime(movingTimeMs(lastTrip.points) / 1000)}</strong></div><div><Mountain /><small>Height</small><strong>{fmtDistance(lastTrip.heightMeters)}</strong></div><div><Flag /><small>New road*</small><strong>{fmtDistance(lastTrip.newRoadUnits * 25)}</strong></div></div>
       <p className="privacy-note">{lastTrip.communityStatus === 'uploaded' ? 'Added to the community leaderboard. Eligible road visits count toward ownership, which becomes final around 09:05 Israel time the next morning. Late uploads do not change finished rounds.' : lastTrip.communityStatus === 'pending' ? `Saved here, but not yet fully shared. ${lastTrip.communityError || 'Guava is checking the roads. It will retry automatically while online.'}` : lastTrip.communityStatus === 'failed' ? `Saved on this device. Sharing needs attention: ${lastTrip.communityError || 'Please check your connection and account.'}` : 'Private drive saved on this device. Join community play in Settings before your next drive to compete.'} *Road is approximate local exploration, not awarded territory.</p>
       {sharingEnabled && (lastTrip.communityStatus === 'pending' || lastTrip.communityStatus === 'failed') && <button disabled={!hasWriteLock} className="subtle-action sheet-action" onClick={() => retrySharing(lastTrip.id)}>Retry sharing</button>}
       <button className="pink-button sheet-action" onClick={() => setPanel('none')}>Back to map</button>
