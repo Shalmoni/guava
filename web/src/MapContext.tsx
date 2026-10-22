@@ -5,6 +5,7 @@ import './game-context.css';
 type Props = {
   view: MapView;
   isCommunity: boolean;
+  isGuest: boolean;
   hasRoads: boolean;
   /** Saved drives still waiting to upload; this is not a count of captured roads. */
   pendingCount?: number;
@@ -14,14 +15,14 @@ type Props = {
 };
 
 export default function MapContext({
-  view, isCommunity, hasRoads, pendingCount = 0, isLoading = false, unavailable = false, onOpenLeaderboard,
+  view, isCommunity, isGuest, hasRoads, pendingCount = 0, isLoading = false, unavailable = false, onOpenLeaderboard,
 }: Props) {
   if (view !== 'Territory' && view !== 'Road Pulse' && view !== 'My Roads') return null;
   const mine = view === 'My Roads';
   const title = view === 'Territory' ? 'Territory' : mine ? 'My Roads' : 'Community Road Pulse';
   let message = '';
   if (mine) message = hasRoads ? 'Your saved drives on this device. Route lines stay in this browser.' : 'Finish and save a drive to see your roads here.';
-  else if (!isCommunity) message = 'Community play is off. Join in Settings to see shared roads.';
+  else if (!isCommunity) message = isGuest ? 'Sign in with Google to join community play and see shared roads.' : 'Community play is off. Join in Settings to see shared roads.';
   else if (unavailable) message = hasRoads ? 'Showing the last available community roads. Trying to reconnect.' : 'Community roads are unavailable right now. Your local drive history is still available.';
   else if (isLoading) message = 'Loading community roads…';
   else if (!hasRoads) message = view === 'Territory'

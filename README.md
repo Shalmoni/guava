@@ -2,7 +2,7 @@
 
 Guava is a mobile-first driving map and road-territory game. The shareable app is the web build in `web/`, deployed through GitHub Pages at [shalmoni.github.io/guava](https://shalmoni.github.io/guava/). The older iOS prototype in `Mappy/` is a design reference, not the app that link opens.
 
-The app requires Google sign-in. Community play is opt-in and off by default. A player can explore the map and save private drives without joining the shared game. After explicit consent to the live-territory notice, road-unit visits sync during opted-in drives; shared XP, distance, and height update only after a finished drive is saved. Older private drives are not silently uploaded.
+Players can sign in with Google or choose a local-only guest profile with a username. Guest names and drives stay in that browser and cannot enter the shared game or transfer automatically to a Google account. Google-signed-in players choose a username as the first onboarding step; community play is then opt-in and off by default. After explicit consent to the live-territory notice, road-unit visits sync during opted-in drives; shared XP, distance, and height update only after a finished drive is saved. Older private drives are not silently uploaded.
 
 ## Rules
 
