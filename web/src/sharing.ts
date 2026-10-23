@@ -15,6 +15,16 @@ export function uploadReady(trip: Trip, ownerId: string, now: number): boolean {
     && (!trip.retryAfter || trip.retryAfter <= now);
 }
 
+export function canShareSavedDrive(trip: Trip, ownerId: string, now: number): boolean {
+  return ownerId !== 'local' && trip.ownerId === ownerId && trip.communityStatus === undefined
+    && Number.isFinite(trip.endedAt) && trip.endedAt <= now + 120_000
+    && now - trip.endedAt <= 7 * 24 * 60 * 60 * 1000
+    && trip.endedAt - trip.startedAt >= 15_000
+    && trip.endedAt - trip.startedAt <= 8 * 60 * 60 * 1000
+    && trip.distanceMeters >= 50 && trip.distanceMeters <= 200_000
+    && trip.points.length >= 2 && trip.points.length <= 40_000;
+}
+
 export function retryDelay(attempt: number): number {
   return Math.min(300_000, 15_000 * 2 ** Math.min(Math.max(attempt - 1, 0), 5));
 }

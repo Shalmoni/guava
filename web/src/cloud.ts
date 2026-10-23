@@ -4,6 +4,7 @@ import { supabase } from './supabase';
 import { CloudUploadError, uploadError } from './cloudErrors';
 export { CloudUploadError } from './cloudErrors';
 export { cloudTerritoryLayers } from './territoryLayers';
+export { cloudRankings } from './leaderboard';
 
 export type CloudScore = {
   user_id: string;
@@ -125,17 +126,6 @@ export async function bankTerritorySegment(sessionId: string, startedAt: number,
   });
   if (error) throw await uploadError(error);
   return Number(data?.banked || 0);
-}
-
-export function cloudRankings(game: CloudGame, metric: 'XP' | 'Distance' | 'Height' | 'Territory', me: string) {
-  const names = new Map(game.profiles.filter(profile => profile.community_opt_in).map(profile => [profile.user_id, profile.display_name]));
-  return game.scores.filter(score => names.has(score.user_id)).map(score => ({
-    id: score.user_id,
-    name: score.user_id === me ? 'You' : names.get(score.user_id) || 'Driver',
-    color: score.user_id === me ? '#f18ca0' : '#484d53',
-    value: metric === 'XP' ? score.xp : metric === 'Distance' ? score.distance_m
-      : metric === 'Height' ? score.height_m : score.territory_m,
-  })).sort((a, b) => b.value - a.value || a.name.localeCompare(b.name));
 }
 
 export function cloudPulseLayers(game: CloudGame) {
