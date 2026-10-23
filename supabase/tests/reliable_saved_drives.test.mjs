@@ -12,6 +12,7 @@ const migrations = [
   '20261020100432_territory_card_and_round_state.sql', '20261020101229_territory_detail_consent.sql',
   '20261020101442_hide_depleted_tied_roads.sql', '20261020141615_reliable_saved_drives.sql',
   '20261022135441_live_territory_contests.sql',
+  '20261023123733_service_role_game_grants.sql',
 ];
 const owner = '11111111-1111-4111-8111-111111111111';
 const other = '22222222-2222-4222-8222-222222222222';
@@ -36,12 +37,27 @@ async function database() {
     sql = sql.replace(/select cron\.unschedule\([\s\S]*$/, '');
     await db.exec(sql);
   }
-  await db.exec(`grant all on all tables in schema public to service_role;
-    insert into auth.users values ('${owner}'), ('${other}');
+  await db.exec(`insert into auth.users values ('${owner}'), ('${other}');
     insert into guava_profiles(user_id,display_name,community_opt_in,live_territory_consent_at,territory_detail_consent_at,open_territory_consent_at)
     values ('${owner}','One',true,now(),now(),now()), ('${other}','Two',true,now(),now(),now());`);
   return db;
 }
+
+test('service role can record and upload a drive without granting browsers write access', async () => {
+  const db = await database();
+  try {
+    const now = new Date().toISOString();
+    await db.exec('set role service_role');
+    const banked = await db.query(`select public.guava_record_live_units($1,$2,$3::timestamptz - interval '1 minute',$3,$4) as n`,
+      [tripId(90), owner, now, JSON.stringify(units(1, now, 'service:'))]);
+    assert.equal(banked.rows[0].n, 1);
+    const saved = await ingest(db, tripId(91), owner, now, units(1, now, 'service:'), 1000);
+    assert.equal(saved.already_saved, false);
+    assert.equal((await db.query('select count(*)::int n from public.guava_game_drives where user_id=$1', [owner])).rows[0].n, 1);
+    await db.exec('reset role');
+    assert.equal((await db.query("select has_table_privilege('authenticated','public.guava_game_drives','INSERT') as can_insert")).rows[0].can_insert, false);
+  } finally { await db.close(); }
+});
 
 function units(count, time, prefix = 'h:') {
   return Array.from({ length: count }, (_, i) => ({ id: `${prefix}${i}`, line: [[35, 32], [35.0001, 32.0001]], length_m: 25, observed_at: time }));
